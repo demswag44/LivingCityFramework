@@ -204,4 +204,55 @@ function Events.TreasuryBalanceChanged(id, balance)
 
 end
 
+function Events.ActivityAdded(id, activityId)
+
+    TriggerEvent(
+        "gs:organization:activityAdded",
+        id,
+        activityId
+    )
+
+end
+
+function Events.TerritoryCreated(id, organizationId)
+
+    TriggerEvent(
+        "gs:organization:territoryCreated",
+        id,
+        organizationId
+    )
+
+end
+
+function Events.TerritoryOwnerChanged(id, oldOwner, newOwner)
+
+    TriggerEvent(
+        "gs:organization:territoryOwnerChanged",
+        id,
+        oldOwner,
+        newOwner
+    )
+
+end
+
+function Events.TerritoryInfluenceChanged(id, influence)
+
+    TriggerEvent(
+        "gs:organization:territoryInfluenceChanged",
+        id,
+        influence
+    )
+
+end
+
+function Events.TerritoryHeatChanged(id, heat)
+
+    TriggerEvent(
+        "gs:organization:territoryHeatChanged",
+        id,
+        heat
+    )
+
+end
+
 return Events

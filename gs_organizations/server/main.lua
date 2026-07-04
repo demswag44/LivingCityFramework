@@ -20,6 +20,8 @@ GSOrganizations.Security.Initialize()
 
 GSOrganizations.Ranks.Initialize()
 
+GSOrganizations.Territories.Initialize()
+
 ---------------------------------------------------------------------
 -- Load Organizations
 ---------------------------------------------------------------------

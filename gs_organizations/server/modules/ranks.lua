@@ -149,11 +149,32 @@ end
 
 function Organization.PromoteMember(id, memberId, rank)
 
-    return Organization.SetRank(
-        id,
-        memberId,
-        rank
-    )
+    local success, reason =
+        Organization.SetRank(
+            id,
+            memberId,
+            rank
+        )
+
+    if success then
+        Organization.AddActivity(
+            id,
+            memberId,
+            memberId,
+            "promote",
+            "Member promoted",
+            ("Player %s was promoted to %s."):format(
+                tostring(memberId),
+                tostring(rank)
+            ),
+            {
+                Target = memberId,
+                Rank = rank,
+            }
+        )
+    end
+
+    return success, reason
 
 end
 
@@ -163,7 +184,42 @@ end
 
 function Organization.DemoteMember(id, memberId, rank)
 
-    return Organization.SetRank(
+    local success, reason =
+        Organization.SetRank(
+            id,
+            memberId,
+            rank
+        )
+
+    if success then
+        Organization.AddActivity(
+            id,
+            memberId,
+            memberId,
+            "demote",
+            "Member demoted",
+            ("Player %s was demoted to %s."):format(
+                tostring(memberId),
+                tostring(rank)
+            ),
+            {
+                Target = memberId,
+                Rank = rank,
+            }
+        )
+    end
+
+    return success, reason
+
+end
+
+---------------------------------------------------------------------
+-- Legacy Promote Member
+---------------------------------------------------------------------
+
+function Organization.PromoteMemberLegacy(id, memberId, rank)
+
+    return Organization.PromoteMember(
         id,
         memberId,
         rank

@@ -322,6 +322,20 @@ function Organization.RemoveMember(
             "Member not found."
     end
 
+    Organization.AddActivity(
+        organizationId,
+        memberId,
+        memberId,
+        "join",
+        "Member joined",
+        ("Player %s joined the organization."):format(tostring(memberId)),
+        {
+            Actor = actorId,
+            Target = memberId,
+            Rank = joinRank,
+        }
+    )
+
     --------------------------------------------------
     -- Persist
     --------------------------------------------------
@@ -535,6 +549,18 @@ function Organization.KickMember(
 
     )
 
+    Organization.AddActivity(
+        organizationId,
+        actorId,
+        actorId,
+        "kick",
+        "Member kicked",
+        ("Player %s was kicked."):format(tostring(memberId)),
+        {
+            Target = memberId,
+        }
+    )
+
     return true
 
 end
@@ -602,6 +628,18 @@ function Organization.LeaveOrganization(
     organization.Members[memberId] = nil
 
     organization.LastUpdated = os.time()
+
+    Organization.AddActivity(
+        organizationId,
+        memberId,
+        memberId,
+        "leave",
+        "Member left",
+        ("Player %s left the organization."):format(tostring(memberId)),
+        {
+            Target = memberId,
+        }
+    )
 
     --------------------------------------------------
     -- Audit

@@ -164,6 +164,21 @@ function Organization.DepositTreasury(organizationId, actorId, amount, note)
         )
     end
 
+    Organization.AddActivity(
+        organizationId,
+        actorId,
+        actorId,
+        "deposit",
+        "Treasury deposit",
+        ("Deposited $%s into treasury."):format(tostring(amount)),
+        {
+            Amount = amount,
+            BalanceBefore = balanceBefore,
+            BalanceAfter = balanceAfter,
+            Note = note,
+        }
+    )
+
     return true, balanceAfter
 end
 
@@ -234,6 +249,21 @@ function Organization.WithdrawTreasury(organizationId, actorId, amount, note)
             balanceAfter
         )
     end
+
+    Organization.AddActivity(
+        organizationId,
+        actorId,
+        actorId,
+        "withdraw",
+        "Treasury withdrawal",
+        ("Withdrew $%s from treasury."):format(tostring(amount)),
+        {
+            Amount = amount,
+            BalanceBefore = balanceBefore,
+            BalanceAfter = balanceAfter,
+            Note = note,
+        }
+    )
 
     return true, balanceAfter
 end
@@ -340,6 +370,44 @@ function Organization.TransferTreasury(
             toAfter
         )
     end
+
+    Organization.AddActivity(
+        fromOrganizationId,
+        actorId,
+        actorId,
+        "treasury",
+        "Treasury transfer sent",
+        ("Transferred $%s to organization %s."):format(
+            tostring(amount),
+            tostring(toOrganizationId)
+        ),
+        {
+            Amount = amount,
+            TargetOrganization = toOrganizationId,
+            BalanceBefore = fromBefore,
+            BalanceAfter = fromAfter,
+            Note = note,
+        }
+    )
+
+    Organization.AddActivity(
+        toOrganizationId,
+        actorId,
+        actorId,
+        "treasury",
+        "Treasury transfer received",
+        ("Received $%s from organization %s."):format(
+            tostring(amount),
+            tostring(fromOrganizationId)
+        ),
+        {
+            Amount = amount,
+            SourceOrganization = fromOrganizationId,
+            BalanceBefore = toBefore,
+            BalanceAfter = toAfter,
+            Note = note,
+        }
+    )
 
     return true, fromAfter, toAfter
 end

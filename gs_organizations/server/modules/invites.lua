@@ -73,6 +73,18 @@ function Organization.InviteMember(id, actorId, memberId)
 
     organization.LastUpdated = os.time()
 
+    Organization.AddActivity(
+        id,
+        actorId,
+        actorId,
+        "invite",
+        "Member invited",
+        ("Player %s was invited."):format(tostring(memberId)),
+        {
+            Target = memberId,
+        }
+    )
+
     Logger.Info(
         "ORGANIZATIONS",
         ("Player %s invited to %s")

@@ -19,6 +19,7 @@ shared_scripts {
 
     'shared/permissions.lua',
     'shared/rank_templates.lua',
+    'shared/territories.lua',
     'shared/config.lua',
     'shared/ui.lua',
     'shared/locale.lua',
@@ -52,6 +53,7 @@ server_scripts {
     'server/repository/ranks.lua',
     'server/repository/invites.lua',
     'server/repository/treasury.lua',
+    'server/repository/activity.lua',
     'server/repository/history.lua',
 
     -----------------------------------------------------------------
@@ -92,6 +94,7 @@ server_scripts {
     -- Organization Modules
     -----------------------------------------------------------------
 
+    'server/modules/activity.lua',
     'server/modules/create.lua',
     'server/modules/load.lua',
     'server/modules/members.lua',
@@ -125,6 +128,17 @@ server_scripts {
     -----------------------------------------------------------------
 
     'server/tests/runtime.lua',
+
+}
+
+server_scripts {
+
+    -----------------------------------------------------------------
+    -- Territory Framework
+    -----------------------------------------------------------------
+
+    'server/repository/territories.lua',
+    'server/modules/territories.lua',
 
     -----------------------------------------------------------------
     -- Startup

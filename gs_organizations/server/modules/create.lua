@@ -198,6 +198,18 @@ function Organization.Create(data)
         templateName
     )
 
+    Organization.AddActivity(
+        organization.Id,
+        founderId,
+        founderId,
+        "rank_template",
+        "Rank template applied",
+        ("Applied %s rank template."):format(tostring(templateName)),
+        {
+            Template = templateName,
+        }
+    )
+
     organization.Ranks =
         Ranks.List[organization.Id] or {}
 
@@ -283,6 +295,19 @@ function Organization.Create(data)
         )
 
     end
+
+    Organization.AddActivity(
+        organization.Id,
+        founderId,
+        founderId,
+        "created",
+        "Organization created",
+        ("%s was created."):format(organization.Name),
+        {
+            Type = organization.Type,
+            Template = templateName,
+        }
+    )
 
     --------------------------------------------------
     -- Log

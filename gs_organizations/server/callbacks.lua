@@ -108,6 +108,21 @@ local function CountPendingInvites(invites)
     return count
 end
 
+local function IsAdmin(source)
+    return source == 0
+        or IsPlayerAceAllowed(source, "command")
+        or IsPlayerAceAllowed(source, "command.org")
+        or IsPlayerAceAllowed(source, "gs_organizations.admin")
+end
+
+local function GetTerritoriesModule()
+    if not GSOrganizations.Territories then
+        return nil, Error("Territory module is not loaded.")
+    end
+
+    return GSOrganizations.Territories
+end
+
 local function GetOldestPendingInvite(playerId)
     local oldestInvite = nil
     local oldestOrganizationId = nil
@@ -214,6 +229,16 @@ lib.callback.register(UI.Callbacks.GetOrganizationDashboard, function(source)
     local ranks =
         Ranks.GetRanks(organizationId)
 
+    local territories = {}
+
+    if GSOrganizations.Territories
+    and GSOrganizations.Territories.GetByOrganization then
+        territories =
+            GSOrganizations.Territories.GetByOrganization(
+                organizationId
+            )
+    end
+
     return {
         success = true,
         dashboard = {
@@ -233,7 +258,100 @@ lib.callback.register(UI.Callbacks.GetOrganizationDashboard, function(source)
             Heat = organization.Heat or 0,
             RankCount = #ranks,
             PendingInviteCount = CountPendingInvites(organization.Invites),
+            TerritoryCount = #territories,
+            Territories = territories,
         },
+    }
+end)
+
+lib.callback.register(UI.Callbacks.GetTerritories, function()
+    local Territories, errorResponse =
+        GetTerritoriesModule()
+
+    if errorResponse then
+        return errorResponse
+    end
+
+    local territories = {}
+
+    for _, territory in pairs(Territories.GetAll() or {}) do
+        territories[#territories + 1] = territory
+    end
+
+    table.sort(territories, function(left, right)
+        return tostring(left.Name) < tostring(right.Name)
+    end)
+
+    return {
+        success = true,
+        territories = territories,
+    }
+end)
+
+lib.callback.register(UI.Callbacks.GetTerritory, function(_, data)
+    local Territories, errorResponse =
+        GetTerritoriesModule()
+
+    if errorResponse then
+        return errorResponse
+    end
+
+    local territory =
+        Territories.Get(data and data.Id)
+
+    if not territory then
+        return Error("Territory not found.")
+    end
+
+    return {
+        success = true,
+        territory = territory,
+    }
+end)
+
+lib.callback.register(UI.Callbacks.ReloadTerritories, function(source)
+    if not IsAdmin(source) then
+        return Error("You are not allowed to reload territories.")
+    end
+
+    local Territories, errorResponse =
+        GetTerritoriesModule()
+
+    if errorResponse then
+        return errorResponse
+    end
+
+    local success =
+        Territories.Initialize()
+
+    if not success then
+        return Error("Unable to reload territories.")
+    end
+
+    return {
+        success = true,
+        count = CountTable(Territories.GetAll()),
+    }
+end)
+
+lib.callback.register(UI.Callbacks.GetActivityFeed, function(source, data)
+    local playerId =
+        GetPlayerId(source)
+
+    local organizationId =
+        GetPlayerOrganization(playerId)
+
+    if not organizationId then
+        return Error("You are not a member of an organization.")
+    end
+
+    return {
+        success = true,
+        activities =
+            Organization.GetRecentActivities(
+                organizationId,
+                data and data.Limit or 10
+            ),
     }
 end)
 
@@ -597,7 +715,7 @@ lib.callback.register(UI.Callbacks.CloneRank, function(source, data)
 end)
 
 lib.callback.register(UI.Callbacks.ResetRanks, function(source)
-    local organizationId, _, errorResponse =
+    local organizationId, actorId, errorResponse =
         RequireRankManagement(source)
 
     if errorResponse then
@@ -605,6 +723,18 @@ lib.callback.register(UI.Callbacks.ResetRanks, function(source)
     end
 
     Ranks.ResetToDefaults(organizationId)
+
+    Organization.AddActivity(
+        organizationId,
+        actorId,
+        GetPlayerName(source) or actorId,
+        "rank_template",
+        "Rank template applied",
+        "Ranks were reset to the default template.",
+        {
+            Template = "Custom",
+        }
+    )
 
     local organization =
         Organization.Get(organizationId)
