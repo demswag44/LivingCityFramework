@@ -16,6 +16,10 @@ RegisterNetEvent(UI.Events.OpenMenu, function()
     Client.OpenMenu()
 end)
 
+RegisterNetEvent(UI.Events.OpenPhoneApp, function()
+    Client.OpenMenu()
+end)
+
 RegisterNetEvent(UI.Events.OrganizationCreated, function()
     lib.notify({
         title = UI.Config.MenuTitle,

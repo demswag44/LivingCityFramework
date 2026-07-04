@@ -15,6 +15,8 @@ local Logger = exports["gs_core"]:Logger()
 local Config = GS.OrganizationConfig
 
 local Organization = GSOrganizations.Manager
+local Repository = GSOrganizations.Repository.Organizations
+local MembersRepository = GSOrganizations.Repository.Members
 
 ---------------------------------------------------------------------
 -- Create Organization
@@ -41,17 +43,6 @@ function Organization.Create(data)
     local createdAt = os.time()
 
     --------------------------------------------------
-    -- Temporary Runtime ID
-    --
-    -- This will eventually be removed once
-    -- MySQL becomes the single source of IDs.
-    --------------------------------------------------
-
-    local id = Organization.NextId
-
-    Organization.NextId = Organization.NextId + 1
-
-    --------------------------------------------------
     -- Organization Object
     --------------------------------------------------
 
@@ -61,7 +52,7 @@ function Organization.Create(data)
         -- Identity
         --------------------------------------------------
 
-        Id = id,
+        Id = nil,
 
         Name = data.Name,
 
@@ -70,6 +61,12 @@ function Organization.Create(data)
         Type = data.Type,
 
         Description = data.Description or "",
+
+        PrimaryColor = data.PrimaryColor or "#D4AF37",
+
+        SecondaryColor = data.SecondaryColor or "#111111",
+
+        Icon = data.Icon or "",
 
         --------------------------------------------------
         -- Leadership
@@ -162,6 +159,69 @@ function Organization.Create(data)
     }
 
     --------------------------------------------------
+    -- Persist Database
+    --------------------------------------------------
+
+    local result = Repository.Create({
+        name = organization.Name,
+        tag = organization.Tag,
+        type = organization.Type,
+        description = organization.Description,
+        primary_color = organization.PrimaryColor,
+        secondary_color = organization.SecondaryColor,
+        icon = organization.Icon,
+        founder = organization.Founder,
+        leader = organization.Leader,
+        treasury = organization.Treasury,
+        income = organization.Income,
+        expenses = organization.Expenses,
+        reputation = organization.Reputation,
+        influence = organization.Influence,
+        heat = organization.Heat,
+        ai_controlled = organization.AIControlled
+    })
+
+    if not result or not result.id then
+
+        Logger.Error(
+
+            "ORGANIZATIONS",
+
+            ("Failed to persist organization: %s")
+                :format(organization.Name)
+
+        )
+
+        return nil, "Failed to persist organization."
+
+    end
+
+    organization.Id = result.id
+
+    local founderMember = organization.Members[founderId]
+
+    local memberResult = MembersRepository.AddMember({
+        organization_id = organization.Id,
+        member_id = founderMember.Id,
+        rank = founderMember.Rank
+    })
+
+    if not memberResult or not memberResult.id then
+
+        Logger.Error(
+
+            "ORGANIZATIONS",
+
+            ("Failed to persist founder member for organization: %s")
+                :format(organization.Name)
+
+        )
+
+        return nil, "Failed to persist founder member."
+
+    end
+
+    --------------------------------------------------
     -- Register Runtime
     --------------------------------------------------
 
@@ -169,61 +229,18 @@ function Organization.Create(data)
         organization
     )
 
-    --------------------------------------------------
-    -- Persist Database
-    --------------------------------------------------
+    if organization.Id >= Organization.NextId then
 
-    GSOrganizations.Database.Create(
+        Organization.NextId = organization.Id + 1
 
-        organization,
+    end
 
-        function(insertId)
+    Logger.Success(
 
-            if insertId then
+        "ORGANIZATIONS",
 
-                --------------------------------------------------
-                -- Replace Temporary Runtime ID
-                --------------------------------------------------
-
-                Organization.Unregister(
-                    organization.Id
-                )
-
-                organization.Id = insertId
-
-                Organization.Register(
-                    organization
-                )
-
-                if insertId >= Organization.NextId then
-
-                    Organization.NextId = insertId + 1
-
-                end
-
-                Logger.Success(
-
-                    "ORGANIZATIONS",
-
-                    ("Organization persisted (#%d)")
-                        :format(insertId)
-
-                )
-
-            else
-
-                Logger.Error(
-
-                    "ORGANIZATIONS",
-
-                    ("Failed to persist organization: %s")
-                        :format(organization.Name)
-
-                )
-
-            end
-
-        end
+        ("Organization persisted (#%d)")
+            :format(organization.Id)
 
     )
 

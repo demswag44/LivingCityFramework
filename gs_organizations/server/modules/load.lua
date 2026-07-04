@@ -12,7 +12,11 @@
 
 local Logger = exports["gs_core"]:Logger()
 
+local Config = GS.OrganizationConfig
+
 local Organization = GSOrganizations.Manager
+local MembersRepository = GSOrganizations.Repository.Members
+local InvitesRepository = GSOrganizations.Repository.Invites
 
 ---------------------------------------------------------------------
 -- Load Organization
@@ -54,6 +58,12 @@ function Organization.Load(row)
         Type = row.type,
 
         Description = row.description or "",
+
+        PrimaryColor = row.primary_color or "#D4AF37",
+
+        SecondaryColor = row.secondary_color or "#111111",
+
+        Icon = row.icon or "",
 
         --------------------------------------------------
         -- Leadership
@@ -181,6 +191,103 @@ function Organization.Load(row)
 end
 
 ---------------------------------------------------------------------
+-- Load Members
+---------------------------------------------------------------------
+
+function Organization.LoadMembers(organization)
+
+    if not organization
+    or not organization.Id then
+        return 0
+    end
+
+    local rows =
+        MembersRepository.GetMembers(
+            organization.Id
+        )
+
+    local loaded = 0
+
+    organization.Members = {}
+
+    for _, row in ipairs(rows) do
+
+        local rank =
+            row.rank or "Member"
+
+        organization.Members[row.member_id] = {
+
+            Id = row.member_id,
+
+            Rank = rank,
+
+            RankData =
+                Config.DefaultRanks[rank]
+                or Config.DefaultRanks.Member,
+
+            Joined = row.joined_at,
+
+            LastUpdated = row.updated_at
+
+        }
+
+        loaded = loaded + 1
+
+    end
+
+    return loaded
+
+end
+
+---------------------------------------------------------------------
+-- Load Invites
+---------------------------------------------------------------------
+
+function Organization.LoadInvites(organization)
+
+    if not organization
+    or not organization.Id then
+        return 0
+    end
+
+    local rows =
+        InvitesRepository.GetPendingInvites(
+            organization.Id
+        )
+
+    local loaded = 0
+
+    organization.Invites = {}
+
+    for _, row in ipairs(rows) do
+
+        organization.Invites[row.receiver_id] = {
+
+            Id = row.id,
+
+            MemberId = row.receiver_id,
+
+            SenderId = row.sender_id,
+
+            Status = row.status,
+
+            Invited = row.created_at,
+
+            ExpiresAt = row.expires_at,
+
+            LastUpdated = row.updated_at
+
+        }
+
+        loaded = loaded + 1
+
+    end
+
+    return loaded
+
+end
+
+---------------------------------------------------------------------
 -- Load All Organizations
 ---------------------------------------------------------------------
 
@@ -194,7 +301,18 @@ function Organization.LoadAll(rows)
 
     for _, row in ipairs(rows) do
 
-        if Organization.Load(row) then
+        local organization =
+            Organization.Load(row)
+
+        if organization then
+
+            Organization.LoadMembers(
+                organization
+            )
+
+            Organization.LoadInvites(
+                organization
+            )
 
             loaded = loaded + 1
 

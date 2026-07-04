@@ -9,7 +9,8 @@ version '0.1.0-alpha'
 
 dependencies {
     'gs_core',
-    'ox_lib'
+    'ox_lib',
+    'oxmysql'
 }
 
 shared_scripts {
@@ -28,12 +29,25 @@ client_scripts {
     'client/main.lua',
     'client/menu.lua',
     'client/create.lua',
+    'client/invites.lua',
     'client/callbacks.lua',
     'client/events.lua',
 
 }
 
 server_scripts {
+
+    '@oxmysql/lib/MySQL.lua',
+
+    -----------------------------------------------------------------
+    -- Repository
+    -----------------------------------------------------------------
+
+    'server/repository/organizations.lua',
+    'server/repository/members.lua',
+    'server/repository/ranks.lua',
+    'server/repository/invites.lua',
+    'server/repository/history.lua',
 
     -----------------------------------------------------------------
     -- Organization Core

@@ -13,14 +13,19 @@ local UI = GSOrganizations.UI
 
 UI.Contexts = {
     Main = "gs_organizations:main",
+    Invitations = "gs_organizations:invitations",
 }
 
 UI.Callbacks = {
     CreateOrganization = "gs_organizations:createOrganization",
+    InvitePlayer = "gs_organizations:invitePlayer",
+    AcceptInvite = "gs_organizations:acceptInvite",
+    DeclineInvite = "gs_organizations:declineInvite",
 }
 
 UI.Events = {
     OpenMenu = "gs_organizations:client:openMenu",
+    OpenPhoneApp = "gs_organizations:client:openPhoneApp",
     OrganizationCreated = "gs_organizations:client:organizationCreated",
 }
 
@@ -29,6 +34,10 @@ UI.Config = {
     MaxNameLength = 64,
     DefaultPrimaryColor = "#D4AF37",
     DefaultSecondaryColor = "#111111",
+    EnableQbPhoneApp = true,
+    PhoneAppName = "organizations",
+    PhoneAppLabel = "Organizations",
+    PhoneAppIcon = "fas fa-users",
 }
 
 UI.OrganizationTypes = {

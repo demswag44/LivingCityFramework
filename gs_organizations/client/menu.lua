@@ -31,6 +31,13 @@ local function BuildOptions()
                     Client.OpenCreateDialog()
                 end,
             }
+        elseif item.id == "invitations" then
+            options[#options + 1] = {
+                title = item.title,
+                onSelect = function()
+                    Client.OpenInvitationsMenu()
+                end,
+            }
         elseif item.id == "close" then
             options[#options + 1] = {
                 title = item.title,

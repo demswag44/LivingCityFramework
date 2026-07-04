@@ -20,6 +20,8 @@ local Security = GSOrganizations.Security
 
 local Events = GSOrganizations.Events
 
+local MembersRepository = GSOrganizations.Repository.Members
+
 ---------------------------------------------------------------------
 -- Helpers
 ---------------------------------------------------------------------
@@ -133,6 +135,25 @@ function Organization.AddMember(
     if organization.Members[memberId] then
         return false,
             "Member already exists."
+    end
+
+    --------------------------------------------------
+    -- Persist
+    --------------------------------------------------
+
+    local result =
+        MembersRepository.AddMember(
+            {
+                organization_id = organizationId,
+                member_id = memberId,
+                rank = "Member"
+            }
+        )
+
+    if not result
+    or not result.id then
+        return false,
+            "Failed to persist member."
     end
 
     --------------------------------------------------
@@ -290,6 +311,15 @@ function Organization.RemoveMember(
         return false,
             "Member not found."
     end
+
+    --------------------------------------------------
+    -- Persist
+    --------------------------------------------------
+
+    MembersRepository.RemoveMember(
+        organizationId,
+        memberId
+    )
 
     --------------------------------------------------
     -- Remove
@@ -545,6 +575,15 @@ function Organization.LeaveOrganization(
             "Member not found."
 
     end
+
+    --------------------------------------------------
+    -- Persist
+    --------------------------------------------------
+
+    MembersRepository.RemoveMember(
+        organizationId,
+        memberId
+    )
 
     --------------------------------------------------
     -- Remove

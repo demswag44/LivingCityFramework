@@ -13,12 +13,18 @@
 local Logger = exports["gs_core"]:Logger()
 
 local Organization = GSOrganizations.Manager
+local InvitesRepository = GSOrganizations.Repository.Invites
 
 ---------------------------------------------------------------------
 -- Invite Member
 ---------------------------------------------------------------------
 
-function Organization.InviteMember(id, memberId)
+function Organization.InviteMember(id, actorId, memberId)
+
+    if not memberId then
+        memberId = actorId
+        actorId = nil
+    end
 
     local organization = Organization.Get(id)
 
@@ -34,9 +40,32 @@ function Organization.InviteMember(id, memberId)
         return false, "Player already has a pending invitation."
     end
 
+    local result =
+        InvitesRepository.CreateInvite(
+            {
+                organization_id = id,
+                sender_id = actorId,
+                receiver_id = memberId,
+                status = "pending",
+                expires_at = nil
+            }
+        )
+
+    if not result
+    or not result.id then
+        return false,
+            "Failed to persist invitation."
+    end
+
     organization.Invites[memberId] = {
 
-        Id = memberId,
+        Id = result.id,
+
+        MemberId = memberId,
+
+        SenderId = actorId,
+
+        Status = "pending",
 
         Invited = os.time()
 
@@ -69,6 +98,13 @@ function Organization.AcceptInvite(id, actorId, memberId)
     if not organization.Invites[memberId] then
         return false, "Invitation not found."
     end
+
+    local invite =
+        organization.Invites[memberId]
+
+    InvitesRepository.AcceptInvite(
+        invite.Id
+    )
 
     organization.Invites[memberId] = nil
 
@@ -110,6 +146,13 @@ function Organization.DeclineInvite(id, memberId)
         return false, "Invitation not found."
     end
 
+    local invite =
+        organization.Invites[memberId]
+
+    InvitesRepository.DeclineInvite(
+        invite.Id
+    )
+
     organization.Invites[memberId] = nil
 
     organization.LastUpdated = os.time()
@@ -139,6 +182,13 @@ function Organization.RevokeInvite(id, memberId)
     if not organization.Invites[memberId] then
         return false, "Invitation not found."
     end
+
+    local invite =
+        organization.Invites[memberId]
+
+    InvitesRepository.RevokeInvite(
+        invite.Id
+    )
 
     organization.Invites[memberId] = nil
 

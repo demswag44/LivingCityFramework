@@ -24,7 +24,9 @@ GSOrganizations.Ranks.Initialize()
 -- Load Organizations
 ---------------------------------------------------------------------
 
-GSOrganizations.Database.LoadAll(function(result)
+CreateThread(function()
+
+    local result = GSOrganizations.Repository.Organizations.GetAll()
 
     GSOrganizations.Manager.LoadAll(result)
 

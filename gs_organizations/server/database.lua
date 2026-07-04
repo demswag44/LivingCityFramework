@@ -20,7 +20,7 @@ local Database = GSOrganizations.Database
 ---------------------------------------------------------------------
 
 local Logger = exports["gs_core"]:Logger()
-local CoreDatabase = exports["gs_core"]:Database()
+local Repository = GSOrganizations.Repository.Organizations
 
 ---------------------------------------------------------------------
 -- Initialize
@@ -48,27 +48,18 @@ end
 
 function Database.LoadAll(callback)
 
-    CoreDatabase.Query(
-        [[
-            SELECT *
-            FROM gs_organizations
-            ORDER BY id
-        ]],
-        {},
-        function(result)
+    local result = Repository.GetAll()
 
-            Logger.Info(
-                "ORGANIZATIONS",
-                ("Loaded %d organization(s) from database.")
-                    :format(#result)
-            )
-
-            if callback then
-                callback(result)
-            end
-
-        end
+    Logger.Info(
+        "ORGANIZATIONS",
+        ("Loaded %d organization(s) from database.")
+            :format(#result)
     )
+
+    if callback then
+        callback(result)
+    end
+
 
 end
 
@@ -78,69 +69,45 @@ end
 
 function Database.Create(organization, callback)
 
-    CoreDatabase.Insert(
-        [[
-            INSERT INTO gs_organizations
-            (
-                name,
-                tag,
-                type,
-                description,
-                founder,
-                leader,
-                treasury,
-                income,
-                expenses,
-                reputation,
-                influence,
-                heat,
-                ai_controlled
-            )
-            VALUES
-            (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-            )
-        ]],
-        {
-            organization.Name,
-            organization.Tag,
-            organization.Type,
-            organization.Description,
-            organization.Founder,
-            organization.Leader,
-            organization.Treasury,
-            organization.Income,
-            organization.Expenses,
-            organization.Reputation,
-            organization.Influence,
-            organization.Heat,
-            organization.AIControlled and 1 or 0
-        },
-        function(insertId)
+    local result = Repository.Create({
+        name = organization.Name,
+        tag = organization.Tag,
+        type = organization.Type,
+        description = organization.Description,
+        primary_color = organization.PrimaryColor,
+        secondary_color = organization.SecondaryColor,
+        icon = organization.Icon,
+        founder = organization.Founder,
+        leader = organization.Leader,
+        treasury = organization.Treasury,
+        income = organization.Income,
+        expenses = organization.Expenses,
+        reputation = organization.Reputation,
+        influence = organization.Influence,
+        heat = organization.Heat,
+        ai_controlled = organization.AIControlled
+    })
 
-            if insertId then
+    if result and result.id then
 
-                Logger.Success(
-                    "ORGANIZATIONS",
-                    ("Organization saved (ID: %d)")
-                        :format(insertId)
-                )
+        Logger.Success(
+            "ORGANIZATIONS",
+            ("Organization saved (ID: %d)")
+                :format(result.id)
+        )
 
-            else
+    else
 
-                Logger.Error(
-                    "ORGANIZATIONS",
-                    "Failed to save organization."
-                )
+        Logger.Error(
+            "ORGANIZATIONS",
+            "Failed to save organization."
+        )
 
-            end
+    end
 
-            if callback then
-                callback(insertId)
-            end
-
-        end
-    )
+    if callback then
+        callback(result and result.id or nil)
+    end
 
 end
 
@@ -150,49 +117,28 @@ end
 
 function Database.Update(organization, callback)
 
-    CoreDatabase.Update(
-        [[
-            UPDATE gs_organizations
-            SET
-                name = ?,
-                tag = ?,
-                type = ?,
-                description = ?,
-                founder = ?,
-                leader = ?,
-                treasury = ?,
-                income = ?,
-                expenses = ?,
-                reputation = ?,
-                influence = ?,
-                heat = ?,
-                ai_controlled = ?
-            WHERE id = ?
-        ]],
-        {
-            organization.Name,
-            organization.Tag,
-            organization.Type,
-            organization.Description,
-            organization.Founder,
-            organization.Leader,
-            organization.Treasury,
-            organization.Income,
-            organization.Expenses,
-            organization.Reputation,
-            organization.Influence,
-            organization.Heat,
-            organization.AIControlled and 1 or 0,
-            organization.Id
-        },
-        function(rows)
+    local result = Repository.Update(organization.Id, {
+        name = organization.Name,
+        tag = organization.Tag,
+        type = organization.Type,
+        description = organization.Description,
+        primary_color = organization.PrimaryColor,
+        secondary_color = organization.SecondaryColor,
+        icon = organization.Icon,
+        founder = organization.Founder,
+        leader = organization.Leader,
+        treasury = organization.Treasury,
+        income = organization.Income,
+        expenses = organization.Expenses,
+        reputation = organization.Reputation,
+        influence = organization.Influence,
+        heat = organization.Heat,
+        ai_controlled = organization.AIControlled
+    })
 
-            if callback then
-                callback(rows)
-            end
-
-        end
-    )
+    if callback then
+        callback(result.affectedRows)
+    end
 
 end
 
@@ -202,23 +148,12 @@ end
 
 function Database.Delete(id, callback)
 
-    CoreDatabase.Execute(
-        [[
-            DELETE
-            FROM gs_organizations
-            WHERE id = ?
-        ]],
-        {
-            id
-        },
-        function(result)
+    local result = Repository.Delete(id)
 
-            if callback then
-                callback(result)
-            end
+    if callback then
+        callback(result.affectedRows)
+    end
 
-        end
-    )
 
 end
 
