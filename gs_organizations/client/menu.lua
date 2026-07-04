@@ -52,6 +52,13 @@ local function BuildOptions()
                     Client.OpenRanksMenu()
                 end,
             }
+        elseif item.id == "treasury" then
+            options[#options + 1] = {
+                title = item.title,
+                onSelect = function()
+                    Client.OpenTreasuryMenu()
+                end,
+            }
         elseif item.id == "close" then
             options[#options + 1] = {
                 title = item.title,

@@ -24,6 +24,8 @@ GS.OrganizationConfig.AllowNPCOrganizations = true
 
 GS.OrganizationConfig.AllowPlayerOrganizations = true
 
+GS.OrganizationConfig.AllowMemberTreasuryDeposits = true
+
 ----------------------------------------------------------
 -- Organization Types
 ----------------------------------------------------------

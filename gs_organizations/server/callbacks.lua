@@ -237,6 +237,149 @@ lib.callback.register(UI.Callbacks.GetOrganizationDashboard, function(source)
     }
 end)
 
+lib.callback.register(UI.Callbacks.GetTreasury, function(source)
+    local actorId =
+        GetPlayerId(source)
+
+    local organizationId =
+        GetPlayerOrganization(actorId)
+
+    if not organizationId then
+        return Error("You are not a member of an organization.")
+    end
+
+    local balance, reason =
+        Organization.GetTreasury(
+            organizationId
+        )
+
+    if balance == nil then
+        return Error(reason or "Unable to load treasury.")
+    end
+
+    return {
+        success = true,
+        organizationId = organizationId,
+        balance = balance,
+    }
+end)
+
+lib.callback.register(UI.Callbacks.DepositTreasury, function(source, data)
+    local actorId =
+        GetPlayerId(source)
+
+    local organizationId =
+        GetPlayerOrganization(actorId)
+
+    if not organizationId then
+        return Error("You are not a member of an organization.")
+    end
+
+    local success, balance =
+        Organization.DepositTreasury(
+            organizationId,
+            actorId,
+            data and data.Amount,
+            data and Trim(data.Note)
+        )
+
+    if not success then
+        return Error(balance or "Unable to deposit treasury funds.")
+    end
+
+    return {
+        success = true,
+        balance = balance,
+    }
+end)
+
+lib.callback.register(UI.Callbacks.WithdrawTreasury, function(source, data)
+    local actorId =
+        GetPlayerId(source)
+
+    local organizationId =
+        GetPlayerOrganization(actorId)
+
+    if not organizationId then
+        return Error("You are not a member of an organization.")
+    end
+
+    local success, balance =
+        Organization.WithdrawTreasury(
+            organizationId,
+            actorId,
+            data and data.Amount,
+            data and Trim(data.Note)
+        )
+
+    if not success then
+        return Error(balance or "Unable to withdraw treasury funds.")
+    end
+
+    return {
+        success = true,
+        balance = balance,
+    }
+end)
+
+lib.callback.register(UI.Callbacks.TransferTreasury, function(source, data)
+    local actorId =
+        GetPlayerId(source)
+
+    local organizationId =
+        GetPlayerOrganization(actorId)
+
+    if not organizationId then
+        return Error("You are not a member of an organization.")
+    end
+
+    local success, balance =
+        Organization.TransferTreasury(
+            organizationId,
+            data and tonumber(data.TargetOrganizationId),
+            actorId,
+            data and data.Amount,
+            data and Trim(data.Note)
+        )
+
+    if not success then
+        return Error(balance or "Unable to transfer treasury funds.")
+    end
+
+    return {
+        success = true,
+        balance = balance,
+    }
+end)
+
+lib.callback.register(UI.Callbacks.GetTreasuryTransactions, function(source, data)
+    local actorId =
+        GetPlayerId(source)
+
+    local organizationId =
+        GetPlayerOrganization(actorId)
+
+    if not organizationId then
+        return Error("You are not a member of an organization.")
+    end
+
+    local transactions, reason =
+        Organization.GetTreasuryTransactions(
+            organizationId,
+            actorId,
+            data and data.Limit or 10
+        )
+
+    if not transactions then
+        return Error(reason or "Unable to load treasury transactions.")
+    end
+
+    return {
+        success = true,
+        transactions = transactions,
+    }
+end)
+
 lib.callback.register(UI.Callbacks.InvitePlayer, function(source, data)
     if type(data) ~= "table" then
         return Error("Invalid invite data.")

@@ -33,6 +33,7 @@ client_scripts {
     'client/create.lua',
     'client/invites.lua',
     'client/ranks.lua',
+    'client/treasury.lua',
     'client/callbacks.lua',
     'client/events.lua',
 
@@ -50,6 +51,7 @@ server_scripts {
     'server/repository/members.lua',
     'server/repository/ranks.lua',
     'server/repository/invites.lua',
+    'server/repository/treasury.lua',
     'server/repository/history.lua',
 
     -----------------------------------------------------------------
@@ -94,6 +96,7 @@ server_scripts {
     'server/modules/load.lua',
     'server/modules/members.lua',
     'server/modules/ranks.lua',
+    'server/modules/treasury.lua',
     'server/modules/leadership.lua',
     'server/modules/invites.lua',
     'server/modules/delete.lua',

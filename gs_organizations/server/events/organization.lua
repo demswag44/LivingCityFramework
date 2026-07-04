@@ -149,4 +149,59 @@ function Events.InviteDeclined(id, memberId)
 
 end
 
+function Events.TreasuryDeposited(id, actorId, amount, balance)
+
+    TriggerEvent(
+        "gs:organization:treasuryDeposited",
+        id,
+        actorId,
+        amount,
+        balance
+    )
+
+end
+
+function Events.TreasuryWithdrawn(id, actorId, amount, balance)
+
+    TriggerEvent(
+        "gs:organization:treasuryWithdrawn",
+        id,
+        actorId,
+        amount,
+        balance
+    )
+
+end
+
+function Events.TreasuryTransferred(
+    fromId,
+    toId,
+    actorId,
+    amount,
+    fromBalance,
+    toBalance
+)
+
+    TriggerEvent(
+        "gs:organization:treasuryTransferred",
+        fromId,
+        toId,
+        actorId,
+        amount,
+        fromBalance,
+        toBalance
+    )
+
+end
+
+function Events.TreasuryBalanceChanged(id, balance)
+
+    TriggerEvent(
+        "gs:organization:treasuryBalanceChanged",
+        id,
+        balance
+    )
+
+end
+
 return Events
