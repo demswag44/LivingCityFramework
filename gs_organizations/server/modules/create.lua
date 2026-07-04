@@ -17,6 +17,7 @@ local Config = GS.OrganizationConfig
 local Organization = GSOrganizations.Manager
 local Repository = GSOrganizations.Repository.Organizations
 local MembersRepository = GSOrganizations.Repository.Members
+local Ranks = GSOrganizations.Ranks
 
 ---------------------------------------------------------------------
 -- Create Organization
@@ -80,23 +81,9 @@ function Organization.Create(data)
         -- Members
         --------------------------------------------------
 
-        Members = {
+        Members = {},
 
-            [founderId] = {
-
-                Id = founderId,
-
-                Rank = "Leader",
-
-                RankData = Config.DefaultRanks.Leader,
-
-                Joined = createdAt,
-
-                LastUpdated = createdAt
-
-            }
-
-        },
+        Ranks = {},
 
         Invites = {},
 
@@ -197,6 +184,32 @@ function Organization.Create(data)
     end
 
     organization.Id = result.id
+
+    Ranks.ResetToDefaults(
+        organization.Id
+    )
+
+    organization.Ranks =
+        Ranks.List[organization.Id] or {}
+
+    organization.Members[founderId] = {
+
+        Id = founderId,
+
+        Rank = "Leader",
+
+        RankData =
+            Ranks.GetRankData(
+                organization.Id,
+                "Leader"
+            )
+            or Ranks.GetDefaultRankData("Leader"),
+
+        Joined = createdAt,
+
+        LastUpdated = createdAt
+
+    }
 
     local founderMember = organization.Members[founderId]
 

@@ -18,6 +18,10 @@ local Organization = GSOrganizations.Manager
 local MembersRepository = GSOrganizations.Repository.Members
 local InvitesRepository = GSOrganizations.Repository.Invites
 
+local function GetRanks()
+    return GSOrganizations.Ranks
+end
+
 ---------------------------------------------------------------------
 -- Load Organization
 ---------------------------------------------------------------------
@@ -78,6 +82,8 @@ function Organization.Load(row)
         --------------------------------------------------
 
         Members = {},
+
+        Ranks = {},
 
         Invites = {},
 
@@ -215,15 +221,42 @@ function Organization.LoadMembers(organization)
         local rank =
             row.rank or "Member"
 
+        local Ranks =
+            GetRanks()
+
+        local rankData =
+            Ranks.GetRankData(
+                organization.Id,
+                rank
+            )
+
+        if not rankData then
+            rank =
+                Ranks.GetJoinRankName(
+                    organization.Id
+                )
+
+            rankData =
+                Ranks.GetRankData(
+                    organization.Id,
+                    rank
+                )
+                or Ranks.GetDefaultRankData(rank)
+
+            MembersRepository.UpdateMemberRank(
+                organization.Id,
+                row.member_id,
+                rank
+            )
+        end
+
         organization.Members[row.member_id] = {
 
             Id = row.member_id,
 
             Rank = rank,
 
-            RankData =
-                Config.DefaultRanks[rank]
-                or Config.DefaultRanks.Member,
+            RankData = rankData,
 
             Joined = row.joined_at,
 
@@ -305,6 +338,13 @@ function Organization.LoadAll(rows)
             Organization.Load(row)
 
         if organization then
+
+            local Ranks =
+                GetRanks()
+
+            Ranks.LoadForOrganization(
+                organization
+            )
 
             Organization.LoadMembers(
                 organization

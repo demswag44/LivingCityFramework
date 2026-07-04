@@ -30,6 +30,7 @@ client_scripts {
     'client/menu.lua',
     'client/create.lua',
     'client/invites.lua',
+    'client/ranks.lua',
     'client/callbacks.lua',
     'client/events.lua',
 
@@ -69,18 +70,6 @@ server_scripts {
     'server/security/tests.lua',
 
     -----------------------------------------------------------------
-    -- Organization Modules
-    -----------------------------------------------------------------
-
-    'server/modules/create.lua',
-    'server/modules/load.lua',
-    'server/modules/members.lua',
-    'server/modules/ranks.lua',
-    'server/modules/leadership.lua',
-    'server/modules/invites.lua',
-    'server/modules/delete.lua',
-
-    -----------------------------------------------------------------
     -- Dynamic Rank System (ORG-007)
     -----------------------------------------------------------------
 
@@ -94,6 +83,18 @@ server_scripts {
     'server/ranks/database.lua',
     'server/ranks/events.lua',
     'server/ranks/tests.lua',
+
+    -----------------------------------------------------------------
+    -- Organization Modules
+    -----------------------------------------------------------------
+
+    'server/modules/create.lua',
+    'server/modules/load.lua',
+    'server/modules/members.lua',
+    'server/modules/ranks.lua',
+    'server/modules/leadership.lua',
+    'server/modules/invites.lua',
+    'server/modules/delete.lua',
 
     -----------------------------------------------------------------
     -- API

@@ -14,6 +14,9 @@ local UI = GSOrganizations.UI
 UI.Contexts = {
     Main = "gs_organizations:main",
     Invitations = "gs_organizations:invitations",
+    Ranks = "gs_organizations:ranks",
+    RankActions = "gs_organizations:rankActions",
+    RankPermissions = "gs_organizations:rankPermissions",
 }
 
 UI.Callbacks = {
@@ -21,6 +24,12 @@ UI.Callbacks = {
     InvitePlayer = "gs_organizations:invitePlayer",
     AcceptInvite = "gs_organizations:acceptInvite",
     DeclineInvite = "gs_organizations:declineInvite",
+    GetRanks = "gs_organizations:getRanks",
+    CreateRank = "gs_organizations:createRank",
+    UpdateRank = "gs_organizations:updateRank",
+    DeleteRank = "gs_organizations:deleteRank",
+    CloneRank = "gs_organizations:cloneRank",
+    ResetRanks = "gs_organizations:resetRanks",
 }
 
 UI.Events = {

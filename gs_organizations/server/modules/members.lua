@@ -21,6 +21,7 @@ local Security = GSOrganizations.Security
 local Events = GSOrganizations.Events
 
 local MembersRepository = GSOrganizations.Repository.Members
+local Ranks = GSOrganizations.Ranks
 
 ---------------------------------------------------------------------
 -- Helpers
@@ -141,12 +142,17 @@ function Organization.AddMember(
     -- Persist
     --------------------------------------------------
 
+    local joinRank =
+        Ranks.GetJoinRankName(
+            organizationId
+        )
+
     local result =
         MembersRepository.AddMember(
             {
                 organization_id = organizationId,
                 member_id = memberId,
-                rank = "Member"
+                rank = joinRank
             }
         )
 
@@ -164,10 +170,14 @@ function Organization.AddMember(
 
         Id = memberId,
 
-        Rank = "Member",
+        Rank = joinRank,
 
         RankData =
-            Config.DefaultRanks.Member,
+            Ranks.GetRankData(
+                organizationId,
+                joinRank
+            )
+            or Ranks.GetDefaultRankData(joinRank),
 
         Joined = os.time(),
 

@@ -15,6 +15,8 @@ local Logger = exports["gs_core"]:Logger()
 local Config = GS.OrganizationConfig
 
 local Organization = GSOrganizations.Manager
+local Ranks = GSOrganizations.Ranks
+local MembersRepository = GSOrganizations.Repository.Members
 
 ---------------------------------------------------------------------
 -- Get Rank
@@ -66,12 +68,32 @@ function Organization.SetRank(id, memberId, rank)
         return false, "Member not found."
     end
 
-    local rankData = Config.DefaultRanks[rank]
+    local rankData =
+        Ranks.GetRankData(
+            id,
+            rank
+        )
 
     if not rankData then
         return false,
             ("Invalid rank '%s'")
                 :format(tostring(rank))
+    end
+
+    --------------------------------------------------
+    -- Persist
+    --------------------------------------------------
+
+    local result =
+        MembersRepository.UpdateMemberRank(
+            id,
+            memberId,
+            rank
+        )
+
+    if not result
+    or result.affectedRows < 1 then
+        return false, "Failed to persist member rank."
     end
 
     --------------------------------------------------

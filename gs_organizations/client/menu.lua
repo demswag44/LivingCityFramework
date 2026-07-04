@@ -38,6 +38,13 @@ local function BuildOptions()
                     Client.OpenInvitationsMenu()
                 end,
             }
+        elseif item.id == "ranks" then
+            options[#options + 1] = {
+                title = item.title,
+                onSelect = function()
+                    Client.OpenRanksMenu()
+                end,
+            }
         elseif item.id == "close" then
             options[#options + 1] = {
                 title = item.title,

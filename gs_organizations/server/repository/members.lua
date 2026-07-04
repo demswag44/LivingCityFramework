@@ -58,6 +58,26 @@ function Repository.RemoveMember(organizationId, memberId)
     }
 end
 
+function Repository.UpdateMemberRank(organizationId, memberId, rank)
+    local affectedRows = MySQL.update.await(
+        [[
+            UPDATE gs_organization_members
+            SET rank = ?
+            WHERE organization_id = ?
+              AND member_id = ?
+        ]],
+        {
+            rank,
+            organizationId,
+            memberId,
+        }
+    )
+
+    return {
+        affectedRows = affectedRows or 0,
+    }
+end
+
 function Repository.GetMember(organizationId, memberId)
     return MySQL.single.await(
         [[

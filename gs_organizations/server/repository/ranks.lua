@@ -13,6 +13,14 @@ GSOrganizations.Repository.Ranks =
 
 local Repository = GSOrganizations.Repository.Ranks
 
+local function EncodePermissions(value)
+    if type(value) == "string" then
+        return value
+    end
+
+    return json.encode(value or {})
+end
+
 function Repository.CreateRank(data)
     local id = MySQL.insert.await(
         [[
@@ -35,10 +43,10 @@ function Repository.CreateRank(data)
         {
             data.organization_id,
             data.name,
-            data.label,
+            data.label or data.name,
             data.weight,
-            data.permissions_json,
-            data.salary,
+            EncodePermissions(data.permissions_json or data.permissions),
+            data.salary or 0,
             data.color,
             data.icon,
         }
@@ -47,6 +55,21 @@ function Repository.CreateRank(data)
     return {
         id = id,
     }
+end
+
+function Repository.GetRank(organizationId, name)
+    return MySQL.single.await(
+        [[
+            SELECT *
+            FROM gs_organization_ranks
+            WHERE organization_id = ?
+              AND name = ?
+        ]],
+        {
+            organizationId,
+            name,
+        }
+    )
 end
 
 function Repository.DeleteRank(organizationId, name)
@@ -60,6 +83,23 @@ function Repository.DeleteRank(organizationId, name)
         {
             organizationId,
             name,
+        }
+    )
+
+    return {
+        affectedRows = affectedRows or 0,
+    }
+end
+
+function Repository.DeleteOrganizationRanks(organizationId)
+    local affectedRows = MySQL.update.await(
+        [[
+            DELETE
+            FROM gs_organization_ranks
+            WHERE organization_id = ?
+        ]],
+        {
+            organizationId,
         }
     )
 
@@ -87,6 +127,7 @@ function Repository.UpdateRank(organizationId, name, data)
         [[
             UPDATE gs_organization_ranks
             SET
+                name = ?,
                 label = ?,
                 weight = ?,
                 permissions_json = ?,
@@ -97,10 +138,11 @@ function Repository.UpdateRank(organizationId, name, data)
               AND name = ?
         ]],
         {
-            data.label,
+            data.name or name,
+            data.label or data.name or name,
             data.weight,
-            data.permissions_json,
-            data.salary,
+            EncodePermissions(data.permissions_json or data.permissions),
+            data.salary or 0,
             data.color,
             data.icon,
             organizationId,

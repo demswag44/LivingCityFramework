@@ -8,6 +8,8 @@
 
 local UI = GSOrganizations.UI
 local Organization = GSOrganizations.Manager
+local Ranks = GSOrganizations.Ranks
+local Security = GSOrganizations.Security
 
 local function Trim(value)
     if type(value) ~= "string" then
@@ -39,6 +41,40 @@ local function GetPlayerOrganization(playerId)
         )
 
     return organizationId, organization
+end
+
+local function GetPermissionOptions()
+    local permissions = {}
+
+    for _, permission in pairs(GS.OrganizationPermissions) do
+        permissions[#permissions + 1] = permission
+    end
+
+    table.sort(permissions)
+
+    return permissions
+end
+
+local function RequireRankManagement(source)
+    local actorId = GetPlayerId(source)
+    local organizationId = GetPlayerOrganization(actorId)
+
+    if not organizationId then
+        return nil, nil, Error("You are not a member of an organization.")
+    end
+
+    local success, reason =
+        Security.Require(
+            organizationId,
+            actorId,
+            GS.OrganizationPermissions.SET_LEADER
+        )
+
+    if not success then
+        return nil, nil, Error(reason or "You cannot manage ranks.")
+    end
+
+    return organizationId, actorId
 end
 
 local function GetOldestPendingInvite(playerId)
@@ -220,5 +256,151 @@ lib.callback.register(UI.Callbacks.DeclineInvite, function(source)
     return {
         success = true,
         message = "Invitation declined.",
+    }
+end)
+
+lib.callback.register(UI.Callbacks.GetRanks, function(source)
+    local actorId =
+        GetPlayerId(source)
+
+    local organizationId =
+        GetPlayerOrganization(actorId)
+
+    if not organizationId then
+        return Error("You are not a member of an organization.")
+    end
+
+    return {
+        success = true,
+        ranks = Ranks.GetRanks(organizationId),
+        permissions = GetPermissionOptions(),
+    }
+end)
+
+lib.callback.register(UI.Callbacks.CreateRank, function(source, data)
+    local organizationId, _, errorResponse =
+        RequireRankManagement(source)
+
+    if errorResponse then
+        return errorResponse
+    end
+
+    local success, result =
+        Ranks.CreateRank(
+            organizationId,
+            data or {}
+        )
+
+    if not success then
+        return Error(result or "Unable to create rank.")
+    end
+
+    return {
+        success = true,
+        rank = result,
+    }
+end)
+
+lib.callback.register(UI.Callbacks.UpdateRank, function(source, data)
+    local organizationId, _, errorResponse =
+        RequireRankManagement(source)
+
+    if errorResponse then
+        return errorResponse
+    end
+
+    if type(data) ~= "table" or not data.OldName then
+        return Error("Invalid rank update.")
+    end
+
+    local success, result =
+        Ranks.UpdateRank(
+            organizationId,
+            data.OldName,
+            data
+        )
+
+    if not success then
+        return Error(result or "Unable to update rank.")
+    end
+
+    return {
+        success = true,
+        rank = result,
+    }
+end)
+
+lib.callback.register(UI.Callbacks.DeleteRank, function(source, data)
+    local organizationId, _, errorResponse =
+        RequireRankManagement(source)
+
+    if errorResponse then
+        return errorResponse
+    end
+
+    local rankName =
+        data and data.Name
+
+    local success, reason =
+        Ranks.DeleteRank(
+            organizationId,
+            rankName
+        )
+
+    if not success then
+        return Error(reason or "Unable to delete rank.")
+    end
+
+    return {
+        success = true,
+    }
+end)
+
+lib.callback.register(UI.Callbacks.CloneRank, function(source, data)
+    local organizationId, _, errorResponse =
+        RequireRankManagement(source)
+
+    if errorResponse then
+        return errorResponse
+    end
+
+    local success, result =
+        Ranks.CloneRank(
+            organizationId,
+            data and data.SourceName,
+            data and data.Name
+        )
+
+    if not success then
+        return Error(result or "Unable to clone rank.")
+    end
+
+    return {
+        success = true,
+        rank = result,
+    }
+end)
+
+lib.callback.register(UI.Callbacks.ResetRanks, function(source)
+    local organizationId, _, errorResponse =
+        RequireRankManagement(source)
+
+    if errorResponse then
+        return errorResponse
+    end
+
+    Ranks.ResetToDefaults(organizationId)
+
+    local organization =
+        Organization.Get(organizationId)
+
+    if organization then
+        organization.Ranks =
+            Ranks.List[organizationId] or {}
+    end
+
+    return {
+        success = true,
+        ranks = Ranks.GetRanks(organizationId),
     }
 end)

@@ -61,13 +61,37 @@ end
 -- Validate Rank
 ---------------------------------------------------------------------
 
-function Security.ValidateRank(rank)
+function Security.ValidateRank(rank, organizationId)
 
-    if not GS.OrganizationConfig.DefaultRanks[rank] then
-        return false, "Invalid rank."
+    if organizationId then
+
+        if not GSOrganizations.Ranks.GetRankData(
+            organizationId,
+            rank
+        ) then
+            return false, "Invalid rank."
+        end
+
+        return true
+
     end
 
-    return true
+    for _, organization in pairs(Organization.GetAll()) do
+
+        if GSOrganizations.Ranks.GetRankData(
+            organization.Id,
+            rank
+        ) then
+            return true
+        end
+
+    end
+
+    if GS.OrganizationConfig.DefaultRanks[rank] then
+        return true
+    end
+
+    return false, "Invalid rank."
 
 end
 
