@@ -24,7 +24,14 @@ local function BuildOptions()
     local options = {}
 
     for _, item in ipairs(UI.MenuItems) do
-        if item.id == "create" then
+        if item.id == "dashboard" then
+            options[#options + 1] = {
+                title = item.title,
+                onSelect = function()
+                    Client.OpenDashboardMenu()
+                end,
+            }
+        elseif item.id == "create" then
             options[#options + 1] = {
                 title = item.title,
                 onSelect = function()

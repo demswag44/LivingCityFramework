@@ -43,6 +43,11 @@ function Client.OpenCreateDialog()
             options = UI.OrganizationTypes,
         },
         {
+            type = "select",
+            label = "Rank Template",
+            options = UI.GetRankTemplateOptions(),
+        },
+        {
             type = "textarea",
             label = "Description",
             autosize = true,
@@ -68,10 +73,13 @@ function Client.OpenCreateDialog()
     local payload = {
         Name = Trim(input[1]),
         Type = input[2],
-        Description = Trim(input[3]) or "",
-        PrimaryColor = input[4],
-        SecondaryColor = input[5],
-        Icon = Trim(input[6]) or "",
+        Template =
+            input[3]
+            or UI.GetDefaultRankTemplateForType(input[2]),
+        Description = Trim(input[4]) or "",
+        PrimaryColor = input[5],
+        SecondaryColor = input[6],
+        Icon = Trim(input[7]) or "",
     }
 
     if not payload.Name or payload.Name == "" then

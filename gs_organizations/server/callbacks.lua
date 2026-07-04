@@ -77,6 +77,37 @@ local function RequireRankManagement(source)
     return organizationId, actorId
 end
 
+local function CountTable(value)
+    local count = 0
+
+    if type(value) ~= "table" then
+        return count
+    end
+
+    for _ in pairs(value) do
+        count = count + 1
+    end
+
+    return count
+end
+
+local function CountPendingInvites(invites)
+    local count = 0
+
+    if type(invites) ~= "table" then
+        return count
+    end
+
+    for _, invite in pairs(invites) do
+        if not invite.Status
+        or invite.Status == "pending" then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
 local function GetOldestPendingInvite(playerId)
     local oldestInvite = nil
     local oldestOrganizationId = nil
@@ -143,6 +174,10 @@ lib.callback.register(UI.Callbacks.CreateOrganization, function(source, data)
         Type = data.Type,
         Description = Trim(data.Description) or "",
         Founder = GetFounderId(source),
+        Template =
+            data.Template
+            or data.Type
+            or "Custom",
         Tag = "",
         PrimaryColor = data.PrimaryColor,
         SecondaryColor = data.SecondaryColor,
@@ -162,6 +197,43 @@ lib.callback.register(UI.Callbacks.CreateOrganization, function(source, data)
     return {
         success = true,
         organizationId = organization.Id,
+    }
+end)
+
+lib.callback.register(UI.Callbacks.GetOrganizationDashboard, function(source)
+    local playerId =
+        GetPlayerId(source)
+
+    local organizationId, organization =
+        GetPlayerOrganization(playerId)
+
+    if not organizationId or not organization then
+        return Error("You are not a member of an organization.")
+    end
+
+    local ranks =
+        Ranks.GetRanks(organizationId)
+
+    return {
+        success = true,
+        dashboard = {
+            Id = organization.Id,
+            Name = organization.Name,
+            Type = organization.Type,
+            Description = organization.Description,
+            PrimaryColor = organization.PrimaryColor,
+            SecondaryColor = organization.SecondaryColor,
+            Icon = organization.Icon,
+            Founder = organization.Founder,
+            Leader = organization.Leader,
+            MemberCount = CountTable(organization.Members),
+            Treasury = organization.Treasury or 0,
+            Reputation = organization.Reputation or 0,
+            Influence = organization.Influence or 0,
+            Heat = organization.Heat or 0,
+            RankCount = #ranks,
+            PendingInviteCount = CountPendingInvites(organization.Invites),
+        },
     }
 end)
 

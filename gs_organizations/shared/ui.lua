@@ -13,6 +13,7 @@ local UI = GSOrganizations.UI
 
 UI.Contexts = {
     Main = "gs_organizations:main",
+    Dashboard = "gs_organizations:dashboard",
     Invitations = "gs_organizations:invitations",
     Ranks = "gs_organizations:ranks",
     RankActions = "gs_organizations:rankActions",
@@ -21,6 +22,7 @@ UI.Contexts = {
 
 UI.Callbacks = {
     CreateOrganization = "gs_organizations:createOrganization",
+    GetOrganizationDashboard = "gs_organizations:getOrganizationDashboard",
     InvitePlayer = "gs_organizations:invitePlayer",
     AcceptInvite = "gs_organizations:acceptInvite",
     DeclineInvite = "gs_organizations:declineInvite",
@@ -62,7 +64,36 @@ UI.OrganizationTypes = {
     { label = "Custom", value = "Custom" },
 }
 
+function UI.GetRankTemplateOptions()
+    local options = {}
+
+    for name, template in pairs(GS.OrganizationRankTemplates or {}) do
+        options[#options + 1] = {
+            label = template.Label or name,
+            value = name,
+        }
+    end
+
+    table.sort(options, function(left, right)
+        return left.label < right.label
+    end)
+
+    return options
+end
+
+function UI.GetDefaultRankTemplateForType(organizationType)
+    local templates =
+        GS.OrganizationRankTemplates or {}
+
+    if templates[organizationType] then
+        return organizationType
+    end
+
+    return "Custom"
+end
+
 UI.MenuItems = {
+    { id = "dashboard", title = "Dashboard" },
     { id = "create", title = "Create Organization" },
     { id = "my_organization", title = "My Organization" },
     { id = "members", title = "Members" },

@@ -18,9 +18,10 @@ shared_scripts {
     '@ox_lib/init.lua',
 
     'shared/permissions.lua',
+    'shared/rank_templates.lua',
     'shared/config.lua',
-    'shared/locale.lua',
     'shared/ui.lua',
+    'shared/locale.lua',
 
 }
 
@@ -28,6 +29,7 @@ client_scripts {
 
     'client/main.lua',
     'client/menu.lua',
+    'client/dashboard.lua',
     'client/create.lua',
     'client/invites.lua',
     'client/ranks.lua',

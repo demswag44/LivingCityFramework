@@ -42,6 +42,12 @@ function Organization.Create(data)
     end
 
     local createdAt = os.time()
+    local templateName =
+        Ranks.ResolveTemplateName(
+            data.Template
+            or data.Type
+            or "Custom"
+        )
 
     --------------------------------------------------
     -- Organization Object
@@ -68,6 +74,8 @@ function Organization.Create(data)
         SecondaryColor = data.SecondaryColor or "#111111",
 
         Icon = data.Icon or "",
+
+        Template = templateName,
 
         --------------------------------------------------
         -- Leadership
@@ -185,25 +193,31 @@ function Organization.Create(data)
 
     organization.Id = result.id
 
-    Ranks.ResetToDefaults(
-        organization.Id
+    Ranks.ResetToTemplate(
+        organization.Id,
+        templateName
     )
 
     organization.Ranks =
         Ranks.List[organization.Id] or {}
 
+    local founderRank =
+        Ranks.GetTopTemplateRankName(
+            templateName
+        )
+
     organization.Members[founderId] = {
 
         Id = founderId,
 
-        Rank = "Leader",
+        Rank = founderRank,
 
         RankData =
             Ranks.GetRankData(
                 organization.Id,
-                "Leader"
+                founderRank
             )
-            or Ranks.GetDefaultRankData("Leader"),
+            or Ranks.GetDefaultRankData(founderRank),
 
         Joined = createdAt,
 

@@ -335,6 +335,156 @@ function Ranks.GetDefaultRanks()
     return defaults
 end
 
+local function NormalizeTemplateKey(templateName)
+    if type(templateName) ~= "string" then
+        return nil
+    end
+
+    local normalized =
+        templateName
+            :match("^%s*(.-)%s*$")
+            :gsub("%s+", "")
+            :lower()
+
+    if normalized == "" then
+        return nil
+    end
+
+    return normalized
+end
+
+local function FindTemplateName(templateName)
+    local templates =
+        GS.OrganizationRankTemplates or {}
+
+    if type(templateName) == "string"
+    and templates[templateName] then
+        return templateName
+    end
+
+    local requested =
+        NormalizeTemplateKey(templateName)
+
+    if requested then
+        for name in pairs(templates) do
+            if NormalizeTemplateKey(name) == requested then
+                return name
+            end
+
+            local template = templates[name]
+
+            if type(template) == "table"
+            and NormalizeTemplateKey(template.Label) == requested then
+                return name
+            end
+        end
+    end
+
+    return nil
+end
+
+function Ranks.GetTemplate(templateName)
+    local templates =
+        GS.OrganizationRankTemplates or {}
+
+    local resolvedName =
+        FindTemplateName(templateName)
+
+    if resolvedName then
+        return templates[resolvedName], resolvedName, false
+    end
+
+    if templates.Custom then
+        Logger.Warning(
+            "RANKS",
+            ("Rank template '%s' not found. Falling back to Custom.")
+                :format(tostring(templateName))
+        )
+
+        return templates.Custom, "Custom", true
+    end
+
+    Logger.Warning(
+        "RANKS",
+        ("Rank template '%s' and Custom fallback not found. Falling back to default ranks.")
+            :format(tostring(templateName))
+    )
+
+    return nil, nil, true
+end
+
+function Ranks.ResolveTemplateName(templateName)
+    local resolvedName =
+        FindTemplateName(templateName)
+
+    if resolvedName then
+        return resolvedName
+    end
+
+    local templates =
+        GS.OrganizationRankTemplates or {}
+
+    if templates.Custom then
+        Logger.Warning(
+            "RANKS",
+            ("Rank template '%s' not found. Using Custom.")
+                :format(tostring(templateName))
+        )
+
+        return "Custom"
+    end
+
+    Logger.Warning(
+        "RANKS",
+        ("Rank template '%s' not found and Custom is unavailable. Using default ranks.")
+            :format(tostring(templateName))
+    )
+
+    return nil
+end
+
+function Ranks.GetTemplateRanks(templateName)
+    local template, _, usedFallback =
+        Ranks.GetTemplate(templateName)
+
+    if not template then
+        return Ranks.GetDefaultRanks(), usedFallback
+    end
+
+    local ranks = {}
+
+    for _, rank in ipairs(template.Ranks or {}) do
+        ranks[#ranks + 1] = Copy(rank)
+    end
+
+    if #ranks == 0 then
+        Logger.Warning(
+            "RANKS",
+            ("Rank template '%s' has no ranks. Falling back to default ranks.")
+                :format(tostring(templateName))
+        )
+
+        return Ranks.GetDefaultRanks(), true
+    end
+
+    table.sort(ranks, function(left, right)
+        if left.Weight == right.Weight then
+            return left.Name < right.Name
+        end
+
+        return left.Weight > right.Weight
+    end)
+
+    return ranks, usedFallback
+end
+
+function Ranks.GetTopTemplateRankName(templateName)
+    local ranks =
+        Ranks.GetTemplateRanks(templateName)
+
+    return ranks[1] and ranks[1].Name or "Leader"
+end
+
 function Ranks.GetRankData(organizationId, name)
     local rank = GetBucket(organizationId)[name]
 
@@ -415,6 +565,10 @@ function Ranks.LoadForOrganization(organization)
 end
 
 function Ranks.ResetToDefaults(organizationId)
+    return Ranks.ResetToTemplate(organizationId, "Custom")
+end
+
+function Ranks.ResetToTemplate(organizationId, templateName)
     Repository.DeleteOrganizationRanks(organizationId)
 
     local bucket = GetBucket(organizationId)
@@ -423,7 +577,7 @@ function Ranks.ResetToDefaults(organizationId)
         bucket[key] = nil
     end
 
-    for _, rank in ipairs(Ranks.GetDefaultRanks()) do
+    for _, rank in ipairs(Ranks.GetTemplateRanks(templateName)) do
         Repository.CreateRank(
             ToRepositoryData(
                 organizationId,
