@@ -71,13 +71,34 @@ local function NormalizeTerritory(row)
         return nil
     end
 
+    local polygon =
+        DecodePolygon(row.polygon)
+    local zoneData =
+        polygon
+
+    if type(polygon) == "table"
+    and (
+        polygon.points
+        or polygon.radius
+        or polygon.height
+        or polygon.metadata
+    ) then
+        zoneData = polygon
+        polygon = polygon.points or {}
+    end
+
     return {
         Id = row.id,
         Name = row.name,
         Description = row.description or "",
         OwnerOrganizationId = row.owner_organization_id,
         Color = row.color or "",
-        Polygon = DecodePolygon(row.polygon),
+        Type = zoneData.type or "radius",
+        Radius = tonumber(zoneData.radius),
+        Height = tonumber(zoneData.height),
+        Enabled = zoneData.enabled ~= false,
+        Metadata = zoneData.metadata or {},
+        Polygon = polygon,
         Center = {
             x = tonumber(row.center_x) or 0,
             y = tonumber(row.center_y) or 0,

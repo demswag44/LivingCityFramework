@@ -20,6 +20,8 @@ shared_scripts {
     'shared/permissions.lua',
     'shared/rank_templates.lua',
     'shared/territories.lua',
+    'shared/territory_zones.lua',
+    'shared/territory_editor.lua',
     'shared/config.lua',
     'shared/ui.lua',
     'shared/locale.lua',
@@ -35,6 +37,7 @@ client_scripts {
     'client/invites.lua',
     'client/ranks.lua',
     'client/treasury.lua',
+    'client/territory_zones.lua',
     'client/callbacks.lua',
     'client/events.lua',
 
@@ -129,16 +132,17 @@ server_scripts {
 
     'server/tests/runtime.lua',
 
-}
-
-server_scripts {
-
     -----------------------------------------------------------------
     -- Territory Framework
     -----------------------------------------------------------------
 
     'server/repository/territories.lua',
     'server/modules/territories.lua',
+
+    'server/modules/territory_zones.lua',
+
+    'server/repository/territory_editor.lua',
+    'server/modules/territory_editor.lua',
 
     -----------------------------------------------------------------
     -- Startup

@@ -328,6 +328,11 @@ lib.callback.register(UI.Callbacks.ReloadTerritories, function(source)
         return Error("Unable to reload territories.")
     end
 
+    if GSOrganizations.TerritoryZones
+    and GSOrganizations.TerritoryZones.Initialize then
+        GSOrganizations.TerritoryZones.Initialize()
+    end
+
     return {
         success = true,
         count = CountTable(Territories.GetAll()),
