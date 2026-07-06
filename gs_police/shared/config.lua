@@ -1,4 +1,4 @@
-Config = {}
+Config = Config or {}
 
 Config.Debug = false
 
@@ -237,6 +237,87 @@ Config.AIScene = {
         cleared = "AI officers cleared the incident.",
         clearRequested = "AI clear requested.",
         invalidTask = "Invalid AI task."
+    }
+}
+
+Config.AIPatrol = {
+    enabled = true,
+    debug = true,
+
+    maxActivePatrols = 4,
+    defaultVehicle = "police",
+    defaultPedModel = "s_m_y_cop_01",
+
+    drivingSpeed = 15.0,
+    drivingStyle = 786603,
+    waypointArrivalDistance = 18.0,
+    waypointWaitMs = 2500,
+
+    autoStartOnResourceStart = false,
+
+    zones = {
+        mission_row = {
+            label = "Mission Row Patrol",
+            enabled = true,
+            maxUnits = 1,
+            vehicle = "police",
+            pedModel = "s_m_y_cop_01",
+            spawn = vector4(448.3168, -1024.1874, 28.5991, 95.3422),
+            waypoints = {
+                vector3(425.58, -1025.52, 29.05),
+                vector3(300.20, -1065.56, 29.40),
+                vector3(185.62, -1012.37, 29.32),
+                vector3(215.93, -846.65, 30.73),
+                vector3(409.51, -814.82, 29.30),
+                vector3(452.64, -960.44, 28.47)
+            }
+        },
+
+        davis = {
+            label = "Davis Patrol",
+            enabled = true,
+            maxUnits = 1,
+            vehicle = "police2",
+            pedModel = "s_m_y_cop_01",
+            spawn = vector4(379.35, -1608.25, 29.29, 230.0),
+            waypoints = {
+                vector3(353.93, -1616.31, 29.29),
+                vector3(163.72, -1470.28, 29.14),
+                vector3(86.44, -1379.18, 29.31),
+                vector3(118.48, -1205.39, 29.32),
+                vector3(298.24, -1245.42, 29.24),
+                vector3(390.51, -1444.28, 29.42)
+            }
+        },
+
+        vinewood = {
+            label = "Vinewood Patrol",
+            enabled = true,
+            maxUnits = 1,
+            vehicle = "police3",
+            pedModel = "s_m_y_cop_01",
+            spawn = vector4(638.65, 1.42, 82.78, 250.0),
+            waypoints = {
+                vector3(661.67, 20.34, 84.17),
+                vector3(716.63, 198.51, 87.05),
+                vector3(561.01, 271.03, 103.12),
+                vector3(381.70, 258.31, 103.02),
+                vector3(308.29, 178.75, 103.84),
+                vector3(471.54, 85.94, 99.15)
+            }
+        }
+    },
+
+    messages = {
+        disabled = "AI patrols are disabled.",
+        zoneDisabled = "This patrol zone is disabled.",
+        invalidZone = "Invalid patrol zone.",
+        maxUnits = "Maximum active patrol units reached.",
+        zoneMaxUnits = "This patrol zone already has the maximum patrol units.",
+        spawnFailed = "Unable to spawn AI patrol.",
+        spawned = "AI patrol unit spawned.",
+        cleared = "AI patrol units cleared.",
+        noPatrols = "No AI patrols active."
     }
 }
 

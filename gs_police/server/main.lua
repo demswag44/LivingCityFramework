@@ -4,6 +4,7 @@ local QBCore =
 local recentIncidents = {}
 local incidentRecords = {}
 local incidentIdCounter = 0
+local ActivePatrolUnits = {}
 
 local function DebugPrint(message)
     if Config.Debug then
@@ -802,6 +803,51 @@ local function GetSerializedIncidentRecords()
     return records
 end
 
+RegisterNetEvent("gs_police:server:patrolStatus", function(patrolId, data)
+    if not patrolId then
+        return
+    end
+
+    data =
+        data or {}
+
+    if data.status == "cleared"
+    or data.status == "lost" then
+        ActivePatrolUnits[patrolId] =
+            nil
+        return
+    end
+
+    ActivePatrolUnits[patrolId] =
+        ActivePatrolUnits[patrolId] or {}
+
+    for key, value in pairs(data) do
+        ActivePatrolUnits[patrolId][key] =
+            value
+    end
+
+    ActivePatrolUnits[patrolId].patrolId =
+        patrolId
+    ActivePatrolUnits[patrolId].updatedAt =
+        os.time()
+end)
+
+local function GetActivePatrolUnits()
+    local units =
+        {}
+
+    for _, patrol in pairs(ActivePatrolUnits) do
+        units[#units + 1] =
+            SanitizeForNui(patrol)
+    end
+
+    table.sort(units, function(a, b)
+        return tostring(a.patrolId) < tostring(b.patrolId)
+    end)
+
+    return units
+end
+
 local function TrimIncidentRecords()
     local maxRecords =
         (Config.IncidentRecords and Config.IncidentRecords.maxRecords) or 100
@@ -1233,7 +1279,8 @@ QBCore.Functions.CreateCallback("gs_police:server:getMdtData", function(source, 
 
     cb({
         ok = true,
-        records = GetSerializedIncidentRecords()
+        records = GetSerializedIncidentRecords(),
+        patrols = GetActivePatrolUnits()
     })
 end)
 
@@ -1369,7 +1416,8 @@ QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(s
             success = true,
             ok = true,
             incident = SerializeIncidentRecord(record),
-            records = GetSerializedIncidentRecords()
+            records = GetSerializedIncidentRecords(),
+            patrols = GetActivePatrolUnits()
         })
         return
     elseif action == "note" then
@@ -1397,7 +1445,8 @@ QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(s
         success = true,
         record = SerializeIncidentRecord(record),
         incident = SerializeIncidentRecord(record),
-        records = GetSerializedIncidentRecords()
+        records = GetSerializedIncidentRecords(),
+        patrols = GetActivePatrolUnits()
     })
 end)
 
@@ -1909,6 +1958,108 @@ RegisterCommand("police_clearincidentai", function(source, args)
     })
 end, false)
 
+RegisterCommand("police_spawnpatrol", function(source, args)
+    local eventSource =
+        tonumber(source) or 0
+
+    if not CanUsePoliceRecords(eventSource) then
+        DenyPoliceRecordAccess(eventSource)
+        return
+    end
+
+    local zoneKey =
+        args[1]
+
+    if not zoneKey
+    or zoneKey == "" then
+        if eventSource > 0 then
+            Notify(eventSource, "Usage: /police_spawnpatrol <zoneKey>", "error")
+        else
+            print("[gs_police] Usage: police_spawnpatrol <zoneKey>")
+        end
+        return
+    end
+
+    if not Config.AIPatrol
+    or not Config.AIPatrol.zones
+    or not Config.AIPatrol.zones[zoneKey] then
+        if eventSource > 0 then
+            Notify(eventSource, "Invalid patrol zone.", "error")
+        else
+            print("[gs_police] Invalid patrol zone.")
+        end
+        return
+    end
+
+    if eventSource > 0 then
+        TriggerClientEvent("gs_police:client:spawnPatrolUnit", eventSource, zoneKey)
+    else
+        print("[gs_police] Console cannot spawn client-owned patrol yet. Use this command in-game.")
+    end
+end, false)
+
+RegisterCommand("police_clearpatrols", function(source)
+    local eventSource =
+        tonumber(source) or 0
+
+    if not CanUsePoliceRecords(eventSource) then
+        DenyPoliceRecordAccess(eventSource)
+        return
+    end
+
+    if eventSource > 0 then
+        TriggerClientEvent("gs_police:client:clearPatrols", eventSource)
+        Notify(eventSource, "AI patrol clear requested.", "success")
+    else
+        ActivePatrolUnits =
+            {}
+        print("[gs_police] Patrol state cleared server-side. Client-owned patrols require in-game clear.")
+    end
+end, false)
+
+RegisterCommand("police_patrols", function(source)
+    local eventSource =
+        tonumber(source) or 0
+
+    if not CanUsePoliceRecords(eventSource) then
+        DenyPoliceRecordAccess(eventSource)
+        return
+    end
+
+    local patrols =
+        GetActivePatrolUnits()
+
+    if eventSource == 0 then
+        print(("[gs_police] Active patrols: %s"):format(#patrols))
+
+        for _, patrol in ipairs(patrols) do
+            print(("[gs_police] %s | zone=%s | status=%s | waypoint=%s"):format(
+                patrol.patrolId,
+                patrol.zoneKey or "unknown",
+                patrol.status or "unknown",
+                tostring(patrol.waypointIndex or "n/a")
+            ))
+        end
+        return
+    end
+
+    Notify(eventSource, ("Active patrols: %s"):format(#patrols), "primary")
+
+    for _, patrol in ipairs(patrols) do
+        TriggerClientEvent("chat:addMessage", eventSource, {
+            args = {
+                "GS Police",
+                ("%s | %s | %s | waypoint %s"):format(
+                    patrol.patrolId,
+                    patrol.zoneLabel or patrol.zoneKey or "unknown",
+                    patrol.status or "unknown",
+                    tostring(patrol.waypointIndex or "n/a")
+                )
+            }
+        })
+    end
+end, false)
+
 RegisterCommand("police_noteincident", function(source, args)
     if not CanUsePoliceRecords(source) then
         DenyPoliceRecordAccess(source)
@@ -1990,6 +2141,10 @@ end)
 
 exports("RequestRecommendedAiUnitsForIncident", function(src, incidentId)
     return RequestRecommendedAiUnitsForIncident(src or 0, incidentId)
+end)
+
+exports("GetActivePatrolUnits", function()
+    return GetActivePatrolUnits()
 end)
 
 CreateThread(function()

@@ -18,7 +18,8 @@ local function SendMdtData(result)
         action = "setData",
         ok = result and result.ok == true,
         message = result and result.message or nil,
-        records = result and result.records or {}
+        records = result and result.records or {},
+        patrols = result and result.patrols or {}
     })
 end
 

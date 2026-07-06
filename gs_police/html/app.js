@@ -4,9 +4,11 @@ const emptyState = document.getElementById('emptyState');
 const detailContent = document.getElementById('detailContent');
 const statusFilter = document.getElementById('statusFilter');
 const threatFilter = document.getElementById('threatFilter');
+const patrolList = document.getElementById('patrolList');
 
 let records = [];
 let selectedId = null;
+let patrols = [];
 
 function nui(eventName, data = {}) {
     return fetch(`https://${GetParentResourceName()}/${eventName}`, {
@@ -35,6 +37,15 @@ function titleCase(value) {
     return String(value || 'unknown')
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 function getThreat(record) {
@@ -90,6 +101,30 @@ function renderList() {
         });
 
         incidentList.appendChild(row);
+    });
+}
+
+function renderPatrols() {
+    if (!patrolList) return;
+
+    patrolList.innerHTML = '';
+
+    if (!patrols.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-list';
+        empty.textContent = 'No active patrol units.';
+        patrolList.appendChild(empty);
+        return;
+    }
+
+    patrols.forEach((patrol) => {
+        const row = document.createElement('div');
+        row.className = 'patrol-row';
+        row.innerHTML = `
+            <strong>${escapeHtml(patrol.zoneLabel || patrol.zoneKey || 'Unknown Patrol')}</strong>
+            <span>${escapeHtml(patrol.status || 'unknown')} | waypoint ${escapeHtml(String(patrol.waypointIndex || '-'))}</span>
+        `;
+        patrolList.appendChild(row);
     });
 }
 
@@ -213,12 +248,14 @@ function renderDetail() {
 }
 
 function render() {
+    renderPatrols();
     renderList();
     renderDetail();
 }
 
 function setData(data) {
     records = Array.isArray(data.records) ? data.records : [];
+    patrols = Array.isArray(data.patrols) ? data.patrols : [];
 
     if (!selectedId && records.length) {
         selectedId = records[0].id;
