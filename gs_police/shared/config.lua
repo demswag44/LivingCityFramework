@@ -57,6 +57,8 @@ Config.Dispatch = {
         responding = true,
         ai_assigned = true,
         ai_responding = true,
+        ai_arrived = true,
+        ai_failed = true,
         closed = true,
         cancelled = true
     },
@@ -67,6 +69,48 @@ Config.Dispatch = {
         invalidIncident = "Invalid incident.",
         invalidUnit = "Invalid unit.",
         dispatchDisabled = "Dispatch system is disabled."
+    }
+}
+
+Config.AIResponse = {
+    enabled = true,
+    debug = true,
+
+    spawnDistance = 120.0,
+    arrivalDistance = 25.0,
+    despawnDistance = 250.0,
+    maxActiveUnits = 5,
+    cleanupAfterSeconds = 600,
+
+    vehicleModels = {
+        patrol = "police",
+        backup = "police2",
+        supervisor = "police3"
+    },
+
+    pedModels = {
+        "s_m_y_cop_01",
+        "s_f_y_cop_01"
+    },
+
+    drivingSpeed = 22.0,
+    drivingStyle = 786603,
+
+    behavior = {
+        low = "investigate",
+        medium = "stage",
+        high = "stage",
+        deadly = "contain"
+    },
+
+    messages = {
+        disabled = "AI police response is disabled.",
+        maxUnits = "Maximum AI police units are already active.",
+        noCoords = "Incident has no valid location.",
+        spawnFailed = "Unable to spawn AI police unit.",
+        dispatched = "AI police unit dispatched.",
+        arrived = "AI police unit arrived on scene.",
+        cleared = "AI police unit cleared."
     }
 }
 

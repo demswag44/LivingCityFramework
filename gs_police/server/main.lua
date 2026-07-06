@@ -96,6 +96,31 @@ local function FormatCoords(coords)
     )
 end
 
+local function NormalizeCoords(coords)
+    if not coords then
+        return nil
+    end
+
+    local x =
+        tonumber(coords.x)
+    local y =
+        tonumber(coords.y)
+    local z =
+        tonumber(coords.z)
+
+    if not x
+    or not y
+    or not z then
+        return nil
+    end
+
+    return {
+        x = x,
+        y = y,
+        z = z
+    }
+end
+
 local function FormatValue(value)
     if type(value) == "table" then
         return json.encode(value)
@@ -121,7 +146,32 @@ local function Now()
 end
 
 local function GetIncidentRecordById(incidentId)
-    return incidentRecords[tonumber(incidentId)]
+    local normalizedIncidentId =
+        tonumber(incidentId)
+
+    if not normalizedIncidentId then
+        return nil
+    end
+
+    local directRecord =
+        incidentRecords[normalizedIncidentId]
+        or incidentRecords[tostring(normalizedIncidentId)]
+
+    if directRecord then
+        return directRecord
+    end
+
+    for _, record in pairs(incidentRecords) do
+        local recordId =
+            record and tonumber(record.id)
+
+        if recordId
+        and recordId == normalizedIncidentId then
+            return record
+        end
+    end
+
+    return nil
 end
 
 local function GetOfficerName(src)
@@ -315,6 +365,124 @@ local function RequestAiUnitForIncident(src, incidentId, aiUnitType)
 
     return true, record
 end
+
+RegisterNetEvent("gs_police:server:aiUnitRequested", function(task)
+    local eventSource =
+        tonumber(source) or 0
+
+    if eventSource > 0 then
+        return
+    end
+
+    if not task
+    or not task.record
+    or not task.taskId then
+        return
+    end
+
+    local record =
+        task.record
+    local coords =
+        NormalizeCoords(record.coords or record.location or record.position)
+
+    if not coords then
+        TriggerEvent("gs_police:server:updateAiUnitStatus", task.taskId, "failed", {
+            incidentId = task.incidentId,
+            reason = "noCoords"
+        })
+        return
+    end
+
+    local target =
+        tonumber(task.requestedBy) or 0
+
+    if target <= 0 then
+        local players =
+            GetPlayers()
+
+        target =
+            tonumber(players[1]) or 0
+    end
+
+    if target <= 0 then
+        TriggerEvent("gs_police:server:updateAiUnitStatus", task.taskId, "failed", {
+            incidentId = task.incidentId,
+            reason = "noClientTarget"
+        })
+        return
+    end
+
+    local assessment =
+        record.assessment or {}
+
+    TriggerClientEvent("gs_police:client:spawnAiUnit", target, {
+        taskId = task.taskId,
+        incidentId = task.incidentId,
+        unitType = task.unitType,
+        coords = coords,
+        threatLevel = assessment.finalThreat or record.threatLevel,
+        forcePolicy = assessment.forcePolicy or record.forcePolicy,
+        response = assessment.response or record.response
+    })
+end)
+
+RegisterNetEvent("gs_police:server:updateAiUnitStatus", function(taskId, status, data)
+    if not taskId
+    or not status then
+        return
+    end
+
+    data =
+        data or {}
+
+    local incidentId =
+        tonumber(data.incidentId)
+
+    if not incidentId then
+        return
+    end
+
+    local record =
+        GetIncidentRecordById(incidentId)
+
+    if not record then
+        return
+    end
+
+    local dispatch =
+        EnsureDispatchFields(record)
+    local now =
+        Now()
+
+    if dispatch.aiTaskId
+    and tostring(dispatch.aiTaskId) ~= tostring(taskId) then
+        return
+    end
+
+    dispatch.aiStatus =
+        status
+    dispatch.aiLastUpdate =
+        now
+
+    if status == "responding" then
+        record.status =
+            "ai_responding"
+    elseif status == "arrived" then
+        record.status =
+            "ai_arrived"
+        AddIncidentNote(record, "AI Dispatch", "AI unit arrived on scene.")
+    elseif status == "failed" then
+        record.status =
+            "ai_failed"
+        AddIncidentNote(record, "AI Dispatch", ("AI unit failed to respond: %s."):format(data.reason or "unknown"))
+    elseif status == "cleared" then
+        record.status =
+            "closed"
+        AddIncidentNote(record, "AI Dispatch", "AI unit cleared from incident.")
+    end
+
+    TriggerEvent("gs_police:server:incidentUpdated", record)
+end)
 
 local function SanitizeForNui(value, depth)
     depth =
@@ -855,7 +1023,18 @@ QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(s
     end
 
     local incidentId =
-        tonumber(payload.id or payload.incidentId)
+        tonumber(payload.incidentId or payload.id)
+
+    if not incidentId then
+        cb({
+            success = false,
+            ok = false,
+            error = "invalidIncident",
+            message = "Invalid incident."
+        })
+        return
+    end
+
     local record =
         GetIncidentRecordById(incidentId)
 
@@ -1246,8 +1425,11 @@ RegisterCommand("police_assignincident", function(source, args)
 end, false)
 
 RegisterCommand("police_dispatchai", function(source, args)
-    if not CanUsePoliceRecords(source) then
-        DenyPoliceRecordAccess(source)
+    local commandSource =
+        tonumber(source) or 0
+
+    if not CanUsePoliceRecords(commandSource) then
+        DenyPoliceRecordAccess(commandSource)
         return
     end
 
@@ -1257,16 +1439,16 @@ RegisterCommand("police_dispatchai", function(source, args)
         args[2] or (Config.Dispatch and Config.Dispatch.defaultAiUnitType) or "patrol"
 
     if not incidentId then
-        if source == 0 then
+        if commandSource == 0 then
             print("[gs_police] Usage: police_dispatchai <incidentId> <patrol|backup|supervisor>")
         else
-            Notify(source, "Usage: /police_dispatchai <incidentId> <patrol|backup|supervisor>", "error")
+            Notify(commandSource, "Usage: /police_dispatchai <incidentId> <patrol|backup|supervisor>", "error")
         end
         return
     end
 
     local success, result =
-        RequestAiUnitForIncident(source, incidentId, aiUnitType)
+        RequestAiUnitForIncident(commandSource, incidentId, aiUnitType)
 
     if not success then
         local message =
@@ -1275,18 +1457,18 @@ RegisterCommand("police_dispatchai", function(source, args)
             and Config.Dispatch.messages[result]
             or "Unable to request AI unit."
 
-        if source == 0 then
+        if commandSource == 0 then
             print(("[gs_police] %s"):format(message))
         else
-            Notify(source, message, "error")
+            Notify(commandSource, message, "error")
         end
         return
     end
 
-    if source == 0 then
+    if commandSource == 0 then
         print("[gs_police] AI unit requested for incident.")
     else
-        Notify(source, "AI unit requested for incident.", "success")
+        Notify(commandSource, "AI unit requested for incident.", "success")
     end
 end, false)
 
