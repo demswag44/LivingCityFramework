@@ -321,6 +321,73 @@ Config.AIPatrol = {
     }
 }
 
+Config.PatrolDetection = {
+    enabled = true,
+    debug = true,
+
+    scanIntervalMs = 5000,
+    defaultDetectionRadius = 85.0,
+    defaultCooldownSeconds = 90,
+    maxSignals = 50,
+
+    detectionChance = {
+        low = 45,
+        medium = 65,
+        high = 85,
+        deadly = 100
+    },
+
+    signalTypes = {
+        suspicious_activity = {
+            label = "Suspicious Activity",
+            incidentType = "blackmarket_activity",
+            threatLevel = "low",
+            detectionRadius = 85.0,
+            cooldownSeconds = 90
+        },
+
+        stolen_vehicle_activity = {
+            label = "Stolen Vehicle Activity",
+            incidentType = "stolen_vehicle_delivery",
+            threatLevel = "medium",
+            detectionRadius = 100.0,
+            cooldownSeconds = 120
+        },
+
+        chopshop_activity = {
+            label = "Chop Shop Activity",
+            incidentType = "chopshop_activity",
+            threatLevel = "low",
+            detectionRadius = 100.0,
+            cooldownSeconds = 120
+        },
+
+        shots_fired = {
+            label = "Shots Fired",
+            incidentType = "shots_fired",
+            threatLevel = "deadly",
+            detectionRadius = 180.0,
+            cooldownSeconds = 180
+        },
+
+        gang_activity = {
+            label = "Gang Activity",
+            incidentType = "gang_activity",
+            threatLevel = "medium",
+            detectionRadius = 110.0,
+            cooldownSeconds = 120
+        }
+    },
+
+    messages = {
+        signalAdded = "Patrol detection signal added.",
+        signalDetected = "Patrol detected suspicious activity.",
+        invalidSignal = "Invalid detection signal.",
+        noPatrolNearby = "No patrol nearby detected this signal.",
+        disabled = "Patrol detection is disabled."
+    }
+}
+
 Config.ThreatLevels = {
     low = {
         label = "Low",
@@ -410,6 +477,14 @@ Config.IncidentTypes = {
         forcePolicy = "deadly_force_authorized_if_necessary",
         unitsRecommended = 4,
         description = "Shots fired."
+    },
+
+    gang_activity = {
+        baseThreat = "medium",
+        response = "investigate_with_caution",
+        forcePolicy = "less_lethal_preferred",
+        unitsRecommended = 2,
+        description = "Possible gang activity detected by patrol."
     }
 }
 

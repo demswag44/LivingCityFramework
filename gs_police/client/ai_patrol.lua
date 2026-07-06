@@ -62,6 +62,23 @@ local function LoadModel(model)
     return hash
 end
 
+local function GetPatrolCoords(patrol)
+    if patrol
+    and patrol.vehicle
+    and DoesEntityExist(patrol.vehicle) then
+        local coords =
+            GetEntityCoords(patrol.vehicle)
+
+        return {
+            x = coords.x,
+            y = coords.y,
+            z = coords.z
+        }
+    end
+
+    return nil
+end
+
 local function DrivePatrolToWaypoint(patrol)
     if not patrol
     or not patrol.driver
@@ -213,7 +230,8 @@ local function SpawnPatrolUnit(zoneKey)
         zoneKey = zoneKey,
         zoneLabel = zone.label or zoneKey,
         status = "patrolling",
-        waypointIndex = 1
+        waypointIndex = 1,
+        coords = GetPatrolCoords(ActivePatrols[patrolId])
     })
 
     return true, ActivePatrols[patrolId]
@@ -275,6 +293,14 @@ CreateThread(function()
                 if zone
                 and zone.waypoints
                 and #zone.waypoints > 0 then
+                    TriggerServerEvent("gs_police:server:patrolStatus", patrolId, {
+                        zoneKey = patrol.zoneKey,
+                        zoneLabel = patrol.zoneLabel,
+                        status = patrol.status,
+                        waypointIndex = patrol.waypointIndex,
+                        coords = GetPatrolCoords(patrol)
+                    })
+
                     local waypoint =
                         zone.waypoints[patrol.waypointIndex]
 
@@ -306,7 +332,8 @@ CreateThread(function()
                                 zoneKey = patrol.zoneKey,
                                 zoneLabel = patrol.zoneLabel,
                                 status = "patrolling",
-                                waypointIndex = patrol.waypointIndex
+                                waypointIndex = patrol.waypointIndex,
+                                coords = GetPatrolCoords(patrol)
                             })
                         end
                     end

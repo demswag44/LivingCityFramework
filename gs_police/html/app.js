@@ -5,10 +5,12 @@ const detailContent = document.getElementById('detailContent');
 const statusFilter = document.getElementById('statusFilter');
 const threatFilter = document.getElementById('threatFilter');
 const patrolList = document.getElementById('patrolList');
+const signalList = document.getElementById('signalList');
 
 let records = [];
 let selectedId = null;
 let patrols = [];
+let signals = [];
 
 function nui(eventName, data = {}) {
     return fetch(`https://${GetParentResourceName()}/${eventName}`, {
@@ -125,6 +127,30 @@ function renderPatrols() {
             <span>${escapeHtml(patrol.status || 'unknown')} | waypoint ${escapeHtml(String(patrol.waypointIndex || '-'))}</span>
         `;
         patrolList.appendChild(row);
+    });
+}
+
+function renderSignals() {
+    if (!signalList) return;
+
+    signalList.innerHTML = '';
+
+    if (!signals.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-list';
+        empty.textContent = 'No patrol detection signals.';
+        signalList.appendChild(empty);
+        return;
+    }
+
+    signals.forEach((signal) => {
+        const row = document.createElement('div');
+        row.className = 'patrol-row';
+        row.innerHTML = `
+            <strong>Signal #${escapeHtml(signal.id)} | ${escapeHtml(signal.label || signal.signalType || 'Unknown')}</strong>
+            <span>Detected: ${signal.detected ? 'Yes' : 'No'} | Patrol: ${escapeHtml(signal.detectedByPatrolId || 'none')}</span>
+        `;
+        signalList.appendChild(row);
     });
 }
 
@@ -249,6 +275,7 @@ function renderDetail() {
 
 function render() {
     renderPatrols();
+    renderSignals();
     renderList();
     renderDetail();
 }
@@ -256,6 +283,7 @@ function render() {
 function setData(data) {
     records = Array.isArray(data.records) ? data.records : [];
     patrols = Array.isArray(data.patrols) ? data.patrols : [];
+    signals = Array.isArray(data.signals) ? data.signals : [];
 
     if (!selectedId && records.length) {
         selectedId = records[0].id;

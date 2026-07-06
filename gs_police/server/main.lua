@@ -5,10 +5,21 @@ local recentIncidents = {}
 local incidentRecords = {}
 local incidentIdCounter = 0
 local ActivePatrolUnits = {}
+local PatrolDetectionSignals = {}
+local PatrolDetectionCooldowns = {}
+local NextDetectionSignalId = 1
 
 local function DebugPrint(message)
     if Config.Debug then
         print("[gs_police] " .. message)
+    end
+end
+
+local function DebugPatrolDetection(...)
+    if Config
+    and Config.PatrolDetection
+    and Config.PatrolDetection.debug then
+        print("[gs_police:patrol_detection]", ...)
     end
 end
 
@@ -112,7 +123,20 @@ local function NormalizeCoords(coords)
     if not x
     or not y
     or not z then
-        return nil
+        if type(coords) == "table" then
+            x =
+                tonumber(coords[1])
+            y =
+                tonumber(coords[2])
+            z =
+                tonumber(coords[3])
+        end
+
+        if not x
+        or not y
+        or not z then
+            return nil
+        end
     end
 
     return {
@@ -120,6 +144,30 @@ local function NormalizeCoords(coords)
         y = y,
         z = z
     }
+end
+
+local function DistanceBetweenCoords(a, b)
+    if not a
+    or not b then
+        return 999999.0
+    end
+
+    local ax, ay, az =
+        a.x or 0.0,
+        a.y or 0.0,
+        a.z or 0.0
+    local bx, by, bz =
+        b.x or 0.0,
+        b.y or 0.0,
+        b.z or 0.0
+    local dx =
+        ax - bx
+    local dy =
+        ay - by
+    local dz =
+        az - bz
+
+    return math.sqrt((dx * dx) + (dy * dy) + (dz * dz))
 end
 
 local function FormatValue(value)
@@ -848,6 +896,125 @@ local function GetActivePatrolUnits()
     return units
 end
 
+local function GetPatrolDetectionSignals()
+    local signals =
+        {}
+
+    for _, signal in pairs(PatrolDetectionSignals) do
+        signals[#signals + 1] = {
+            id = signal.id,
+            signalType = signal.signalType,
+            label = signal.label,
+            sourceResource = signal.sourceResource,
+            detected = signal.detected == true,
+            detectedByPatrolId = signal.detectedByPatrolId,
+            detectedAt = signal.detectedAt,
+            createdAt = signal.createdAt
+        }
+    end
+
+    table.sort(signals, function(a, b)
+        return (a.id or 0) > (b.id or 0)
+    end)
+
+    return signals
+end
+
+local function AddPatrolDetectionSignal(signalType, coords, metadata)
+    local cfg =
+        Config.PatrolDetection or {}
+
+    if cfg.enabled == false then
+        return false, "disabled"
+    end
+
+    local signalConfig =
+        cfg.signalTypes and cfg.signalTypes[signalType]
+
+    if not signalConfig then
+        return false, "invalidSignal"
+    end
+
+    local normalizedCoords =
+        NormalizeCoords(coords)
+
+    if not normalizedCoords then
+        return false, "invalidSignal"
+    end
+
+    local signalId =
+        NextDetectionSignalId
+
+    NextDetectionSignalId =
+        NextDetectionSignalId + 1
+    metadata =
+        metadata or {}
+
+    local signal = {
+        id = signalId,
+        signalType = signalType,
+        label = signalConfig.label or signalType,
+        coords = normalizedCoords,
+        sourceResource = metadata.sourceResource or metadata.resource or "unknown",
+        metadata = metadata,
+        createdAt = os.time(),
+        expiresAt = os.time() + (metadata.ttlSeconds or 300),
+        detected = false,
+        detectedByPatrolId = nil,
+        detectedAt = nil
+    }
+
+    PatrolDetectionSignals[signalId] =
+        signal
+
+    local signalCount =
+        0
+
+    for _ in pairs(PatrolDetectionSignals) do
+        signalCount =
+            signalCount + 1
+    end
+
+    if signalCount > (cfg.maxSignals or 50) then
+        local oldestId =
+            nil
+        local oldestTime =
+            os.time()
+
+        for id, existing in pairs(PatrolDetectionSignals) do
+            if existing.createdAt
+            and existing.createdAt <= oldestTime then
+                oldestTime =
+                    existing.createdAt
+                oldestId =
+                    id
+            end
+        end
+
+        if oldestId then
+            PatrolDetectionSignals[oldestId] =
+                nil
+        end
+    end
+
+    DebugPatrolDetection("signal added", signalId, signalType)
+
+    return true, signal
+end
+
+local function RollPatrolDetection(threatLevel)
+    local cfg =
+        Config.PatrolDetection or {}
+    local chances =
+        cfg.detectionChance or {}
+    local chance =
+        chances[threatLevel or "low"] or chances.low or 50
+    local roll =
+        math.random(1, 100)
+
+    return roll <= chance, roll, chance
+end
+
 local function TrimIncidentRecords()
     local maxRecords =
         (Config.IncidentRecords and Config.IncidentRecords.maxRecords) or 100
@@ -1246,6 +1413,154 @@ local function StoreIncident(src, alertData, assessment)
     return incident
 end
 
+local function CreateIncidentFromPatrolDetection(signal, patrol)
+    if not signal
+    or not patrol then
+        return false, "invalidSignal"
+    end
+
+    local cfg =
+        Config.PatrolDetection or {}
+    local signalConfig =
+        cfg.signalTypes and cfg.signalTypes[signal.signalType]
+
+    if not signalConfig then
+        return false, "invalidSignal"
+    end
+
+    local metadata =
+        signal.metadata or {}
+
+    metadata.detectedByPatrol =
+        true
+    metadata.detectedByPatrolId =
+        patrol.patrolId
+    metadata.detectedByPatrolZone =
+        patrol.zoneKey
+    metadata.detectedByPatrolLabel =
+        patrol.zoneLabel
+    metadata.detectionSignalId =
+        signal.id
+
+    local alertData = {
+        incidentType = signalConfig.incidentType,
+        type = signalConfig.incidentType,
+        title = signal.label or "Patrol Detected Activity",
+        message = ("Detected by %s."):format(patrol.zoneLabel or patrol.patrolId or "AI Patrol"),
+        coords = signal.coords,
+        sourceResource = "gs_police_patrol",
+        metadata = metadata,
+        escalation = metadata.escalation or {},
+        patrolDetection = {
+            signalId = signal.id,
+            signalType = signal.signalType,
+            patrolId = patrol.patrolId,
+            zoneKey = patrol.zoneKey,
+            zoneLabel = patrol.zoneLabel
+        }
+    }
+
+    local assessment =
+        AssessThreat(0, alertData)
+    local incident =
+        StoreIncident(0, alertData, assessment)
+    local record =
+        incident and GetIncidentRecordById(incident.id)
+
+    if record then
+        AddIncidentNote(record, "Patrol", ("Detected by %s."):format(patrol.zoneLabel or patrol.patrolId or "AI Patrol"))
+        TriggerEvent("gs_police:server:incidentUpdated", record)
+        return true, record
+    end
+
+    return false, "invalidSignal"
+end
+
+CreateThread(function()
+    while true do
+        local cfg =
+            Config.PatrolDetection or {}
+
+        Wait(cfg.scanIntervalMs or 5000)
+
+        if cfg.enabled ~= false then
+            local now =
+                os.time()
+
+            for signalId, signal in pairs(PatrolDetectionSignals) do
+                if signal.expiresAt
+                and signal.expiresAt <= now then
+                    PatrolDetectionSignals[signalId] =
+                        nil
+                elseif not signal.detected then
+                    local signalConfig =
+                        cfg.signalTypes and cfg.signalTypes[signal.signalType]
+
+                    if signalConfig then
+                        local radius =
+                            signalConfig.detectionRadius
+                            or cfg.defaultDetectionRadius
+                            or 85.0
+
+                        for patrolId, patrol in pairs(ActivePatrolUnits or {}) do
+                            if patrol
+                            and patrol.coords then
+                                local patrolCoords =
+                                    NormalizeCoords(patrol.coords)
+                                local distance =
+                                    DistanceBetweenCoords(signal.coords, patrolCoords)
+
+                                if distance <= radius then
+                                    local cooldownKey =
+                                        ("%s:%s"):format(patrolId, signal.signalType)
+                                    local cooldownUntil =
+                                        PatrolDetectionCooldowns[cooldownKey] or 0
+
+                                    if cooldownUntil <= now then
+                                        local threatLevel =
+                                            signalConfig.threatLevel or "low"
+                                        local detected =
+                                            RollPatrolDetection(threatLevel)
+
+                                        PatrolDetectionCooldowns[cooldownKey] =
+                                            now + (
+                                                signalConfig.cooldownSeconds
+                                                or cfg.defaultCooldownSeconds
+                                                or 90
+                                            )
+
+                                        if detected then
+                                            signal.detected =
+                                                true
+                                            signal.detectedByPatrolId =
+                                                patrolId
+                                            signal.detectedAt =
+                                                now
+
+                                            CreateIncidentFromPatrolDetection(signal, patrol)
+
+                                            DebugPatrolDetection(
+                                                "signal detected",
+                                                signalId,
+                                                "by",
+                                                patrolId,
+                                                "distance",
+                                                distance
+                                            )
+
+                                            break
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
 RegisterNetEvent("gs_police:server:assessIncident", function(alertData)
     local src =
         source
@@ -1280,7 +1595,8 @@ QBCore.Functions.CreateCallback("gs_police:server:getMdtData", function(source, 
     cb({
         ok = true,
         records = GetSerializedIncidentRecords(),
-        patrols = GetActivePatrolUnits()
+        patrols = GetActivePatrolUnits(),
+        signals = GetPatrolDetectionSignals()
     })
 end)
 
@@ -1417,7 +1733,8 @@ QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(s
             ok = true,
             incident = SerializeIncidentRecord(record),
             records = GetSerializedIncidentRecords(),
-            patrols = GetActivePatrolUnits()
+            patrols = GetActivePatrolUnits(),
+            signals = GetPatrolDetectionSignals()
         })
         return
     elseif action == "note" then
@@ -1446,7 +1763,8 @@ QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(s
         record = SerializeIncidentRecord(record),
         incident = SerializeIncidentRecord(record),
         records = GetSerializedIncidentRecords(),
-        patrols = GetActivePatrolUnits()
+        patrols = GetActivePatrolUnits(),
+        signals = GetPatrolDetectionSignals()
     })
 end)
 
@@ -2060,6 +2378,94 @@ RegisterCommand("police_patrols", function(source)
     end
 end, false)
 
+RegisterCommand("police_addsignal", function(source, args)
+    local eventSource =
+        tonumber(source) or 0
+
+    if not CanUsePoliceRecords(eventSource) then
+        DenyPoliceRecordAccess(eventSource)
+        return
+    end
+
+    local signalType =
+        args[1] or "suspicious_activity"
+
+    if eventSource <= 0 then
+        print("[gs_police] police_addsignal must be run in-game so player coords can be used.")
+        return
+    end
+
+    local ped =
+        GetPlayerPed(eventSource)
+
+    if not ped
+    or ped == 0 then
+        Notify(eventSource, "Unable to get player position.", "error")
+        return
+    end
+
+    local coords =
+        GetEntityCoords(ped)
+    local success, result =
+        AddPatrolDetectionSignal(signalType, coords, {
+            sourceResource = "test_command",
+            createdBy = eventSource
+        })
+
+    if not success then
+        local message =
+            Config.PatrolDetection
+            and Config.PatrolDetection.messages
+            and Config.PatrolDetection.messages[result]
+            or "Unable to add signal."
+
+        Notify(eventSource, message, "error")
+        return
+    end
+
+    Notify(eventSource, "Patrol detection signal added.", "success")
+end, false)
+
+RegisterCommand("police_signals", function(source)
+    local eventSource =
+        tonumber(source) or 0
+
+    if not CanUsePoliceRecords(eventSource) then
+        DenyPoliceRecordAccess(eventSource)
+        return
+    end
+
+    local count =
+        0
+
+    for _, signal in pairs(PatrolDetectionSignals) do
+        count =
+            count + 1
+
+        local line =
+            ("Signal #%s | %s | detected=%s | patrol=%s"):format(
+                signal.id,
+                signal.signalType,
+                tostring(signal.detected),
+                tostring(signal.detectedByPatrolId or "none")
+            )
+
+        if eventSource > 0 then
+            TriggerClientEvent("chat:addMessage", eventSource, {
+                args = { "GS Police", line }
+            })
+        else
+            print("[gs_police] " .. line)
+        end
+    end
+
+    if eventSource > 0 then
+        Notify(eventSource, ("Signals: %s"):format(count), "primary")
+    else
+        print(("[gs_police] Signals: %s"):format(count))
+    end
+end, false)
+
 RegisterCommand("police_noteincident", function(source, args)
     if not CanUsePoliceRecords(source) then
         DenyPoliceRecordAccess(source)
@@ -2145,6 +2551,10 @@ end)
 
 exports("GetActivePatrolUnits", function()
     return GetActivePatrolUnits()
+end)
+
+exports("AddPatrolDetectionSignal", function(signalType, coords, metadata)
+    return AddPatrolDetectionSignal(signalType, coords, metadata)
 end)
 
 CreateThread(function()
