@@ -89,7 +89,71 @@ local function GetSpawnPointNearIncident(coords)
     return vector4(coords.x + spawnDistance, coords.y + spawnDistance, coords.z, 0.0)
 end
 
-local function CleanupAIUnit(taskId)
+local function GetSceneBehaviorForUnit(unit)
+    local threatLevel =
+        unit.threatLevel or "low"
+    local sceneCfg =
+        Config.AIScene or {}
+    local behaviorKey =
+        sceneCfg.threatBehavior and sceneCfg.threatBehavior[threatLevel]
+
+    if not behaviorKey then
+        behaviorKey =
+            "investigate"
+    end
+
+    local behavior =
+        sceneCfg.behaviors and sceneCfg.behaviors[behaviorKey]
+
+    if not behavior then
+        behaviorKey =
+            "investigate"
+        behavior =
+            sceneCfg.behaviors and sceneCfg.behaviors.investigate
+    end
+
+    return behaviorKey, behavior
+end
+
+local function SendPedToScenePosition(ped, coords, offsetX, offsetY)
+    if not ped
+    or not DoesEntityExist(ped) then
+        return
+    end
+
+    TaskGoToCoordAnyMeans(
+        ped,
+        coords.x + (offsetX or 0.0),
+        coords.y + (offsetY or 0.0),
+        coords.z,
+        (Config.AIScene and Config.AIScene.walkSpeed) or 1.0,
+        0,
+        false,
+        786603,
+        0.0
+    )
+end
+
+local function StartPedSceneBehavior(ped, coords, behaviorKey)
+    if not ped
+    or not DoesEntityExist(ped) then
+        return
+    end
+
+    ClearPedTasks(ped)
+
+    if behaviorKey == "investigate" then
+        TaskStartScenarioInPlace(ped, "WORLD_HUMAN_CLIPBOARD", 0, true)
+    elseif behaviorKey == "stage" then
+        TaskStartScenarioInPlace(ped, "WORLD_HUMAN_STAND_MOBILE", 0, true)
+    elseif behaviorKey == "contain" then
+        TaskStartScenarioInPlace(ped, "WORLD_HUMAN_GUARD_STAND", 0, true)
+    else
+        TaskStartScenarioInPlace(ped, "WORLD_HUMAN_COP_IDLES", 0, true)
+    end
+end
+
+local function CleanupAIUnit(taskId, manualClose)
     local unit =
         ActiveAIUnits[taskId]
 
@@ -116,7 +180,8 @@ local function CleanupAIUnit(taskId)
         nil
 
     TriggerServerEvent("gs_police:server:updateAiUnitStatus", taskId, "cleared", {
-        incidentId = unit.incidentId
+        incidentId = unit.incidentId,
+        manual = manualClose == true
     })
 end
 
@@ -206,9 +271,17 @@ local function SpawnAIUnit(task)
         driver = driver,
         passenger = passenger,
         coords = coords,
+        threatLevel = task.threatLevel or "low",
+        forcePolicy = task.forcePolicy,
+        response = task.response,
         status = "responding",
         createdAt = GetGameTimer(),
-        arrived = false
+        arrived = false,
+        sceneBehavior = nil,
+        sceneStarted = false,
+        sceneStartedAt = nil,
+        clearRequested = false,
+        clearAfter = nil
     }
 
     ActiveAIUnits[task.taskId] =
@@ -281,42 +354,79 @@ CreateThread(function()
 
                     Wait(2000)
 
-                    if DoesEntityExist(unit.driver) then
-                        TaskGoToCoordAnyMeans(
-                            unit.driver,
-                            unit.coords.x,
-                            unit.coords.y,
-                            unit.coords.z,
-                            1.0,
-                            0,
-                            false,
-                            786603,
-                            0.0
-                        )
-                    end
-
-                    if unit.passenger
-                    and DoesEntityExist(unit.passenger) then
-                        TaskGoToCoordAnyMeans(
-                            unit.passenger,
-                            unit.coords.x + 3.0,
-                            unit.coords.y + 3.0,
-                            unit.coords.z,
-                            1.0,
-                            0,
-                            false,
-                            786603,
-                            0.0
-                        )
-                    end
+                    SendPedToScenePosition(unit.driver, unit.coords, 0.0, 0.0)
+                    SendPedToScenePosition(unit.passenger, unit.coords, 3.0, 3.0)
 
                     TriggerServerEvent("gs_police:server:updateAiUnitStatus", taskId, "arrived", {
                         incidentId = unit.incidentId
                     })
 
+                    Wait(2500)
+
+                    if Config.AIScene
+                    and Config.AIScene.enabled ~= false then
+                        local behaviorKey, behavior =
+                            GetSceneBehaviorForUnit(unit)
+
+                        unit.sceneBehavior =
+                            behaviorKey
+                        unit.sceneStarted =
+                            true
+                        unit.sceneStartedAt =
+                            GetGameTimer()
+                        unit.status =
+                            behaviorKey
+
+                        local durationSeconds =
+                            behavior and behavior.durationSeconds
+                            or Config.AIScene.autoClearAfterSeconds
+                            or Config.AIScene.investigationDurationSeconds
+                            or 90
+
+                        if behavior
+                        and behavior.autoClear == false then
+                            unit.clearAfter =
+                                nil
+                        else
+                            unit.clearAfter =
+                                GetGameTimer() + (durationSeconds * 1000)
+                        end
+
+                        StartPedSceneBehavior(unit.driver, unit.coords, behaviorKey)
+
+                        if unit.passenger
+                        and DoesEntityExist(unit.passenger) then
+                            StartPedSceneBehavior(unit.passenger, unit.coords, behaviorKey)
+                        end
+
+                        TriggerServerEvent("gs_police:server:updateAiUnitStatus", taskId, "scene_" .. behaviorKey, {
+                            incidentId = unit.incidentId,
+                            behavior = behaviorKey
+                        })
+                    end
+
                     DebugPrint("AI unit arrived", taskId)
+                elseif unit.sceneStarted
+                and not unit.clearRequested
+                and unit.clearAfter
+                and Config.AIScene
+                and Config.AIScene.autoClearEnabled
+                and GetGameTimer() >= unit.clearAfter then
+                    unit.clearRequested =
+                        true
+                    unit.status =
+                        "clearing"
+
+                    TriggerServerEvent("gs_police:server:updateAiUnitStatus", taskId, "clearing", {
+                        incidentId = unit.incidentId
+                    })
+
+                    CreateThread(function()
+                        Wait(5000)
+                        CleanupAIUnit(taskId, false)
+                    end)
                 elseif lifetimeSeconds >= (Config.AIResponse.cleanupAfterSeconds or 600) then
-                    CleanupAIUnit(taskId)
+                    CleanupAIUnit(taskId, false)
                 end
             end
         end
@@ -346,15 +456,48 @@ RegisterNetEvent("gs_police:client:spawnAiUnit", function(task)
 end)
 
 RegisterNetEvent("gs_police:client:clearAiUnit", function(taskId)
-    CleanupAIUnit(taskId)
+    CleanupAIUnit(taskId, true)
 end)
 
 RegisterCommand("police_clearai", function()
     for taskId in pairs(ActiveAIUnits) do
-        CleanupAIUnit(taskId)
+        CleanupAIUnit(taskId, true)
     end
 
     QBCore.Functions.Notify("AI police units cleared.", "success")
+end, false)
+
+RegisterCommand("police_clearaiunit", function(_, args)
+    local taskId =
+        args and args[1]
+
+    if not taskId
+    or taskId == "" then
+        QBCore.Functions.Notify("Usage: /police_clearaiunit <taskId>", "error")
+        return
+    end
+
+    local unit =
+        ActiveAIUnits[taskId]
+
+    if not unit then
+        QBCore.Functions.Notify(
+            (Config.AIScene and Config.AIScene.messages and Config.AIScene.messages.invalidTask)
+            or "Invalid AI task.",
+            "error"
+        )
+        return
+    end
+
+    unit.clearRequested =
+        true
+
+    TriggerServerEvent("gs_police:server:updateAiUnitStatus", taskId, "clearing", {
+        incidentId = unit.incidentId
+    })
+
+    CleanupAIUnit(taskId, true)
+    QBCore.Functions.Notify("AI unit cleared.", "success")
 end, false)
 
 RegisterCommand("police_aistate", function()
@@ -365,11 +508,12 @@ RegisterCommand("police_aistate", function()
         count =
             count + 1
 
-        print(("[gs_police:ai] task=%s incident=%s status=%s arrived=%s"):format(
+        print(("[gs_police:ai] task=%s incident=%s status=%s arrived=%s scene=%s"):format(
             tostring(taskId),
             tostring(unit.incidentId),
             tostring(unit.status),
-            tostring(unit.arrived)
+            tostring(unit.arrived),
+            tostring(unit.sceneBehavior)
         ))
     end
 

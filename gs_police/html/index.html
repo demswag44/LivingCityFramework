@@ -29,6 +29,11 @@
                             <option value="ai_assigned">AI Assigned</option>
                             <option value="ai_responding">AI Responding</option>
                             <option value="ai_arrived">AI Arrived</option>
+                            <option value="ai_investigating">AI Investigating</option>
+                            <option value="ai_staging">AI Staging</option>
+                            <option value="ai_containing">AI Containing</option>
+                            <option value="ai_clearing">AI Clearing</option>
+                            <option value="ai_cleared">AI Cleared</option>
                             <option value="ai_failed">AI Failed</option>
                             <option value="closed">Closed</option>
                             <option value="cancelled">Cancelled</option>
@@ -84,6 +89,7 @@
                         <div><span>Assigned By</span><strong id="detailAssignedBy">-</strong></div>
                         <div><span>Assigned At</span><strong id="detailAssignedAt">-</strong></div>
                         <div><span>AI Status</span><strong id="detailAiStatus">-</strong></div>
+                        <div><span>Scene Behavior</span><strong id="detailAiScene">-</strong></div>
                         <div><span>AI Task</span><strong id="detailAiTask">-</strong></div>
                     </div>
 
@@ -105,6 +111,7 @@
                         <button class="ai-btn" data-ai-unit="patrol">AI Patrol</button>
                         <button class="ai-btn" data-ai-unit="backup">AI Backup</button>
                         <button class="ai-btn" data-ai-unit="supervisor">AI Supervisor</button>
+                        <button id="clearAiBtn" class="warn">Clear AI Unit</button>
                         <input id="noteInput" type="text" maxlength="160" placeholder="Add note">
                         <button id="noteBtn">Add Note</button>
                         <button id="closeIncidentBtn" class="danger">Close</button>

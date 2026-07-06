@@ -339,7 +339,7 @@ input {
 
 .actions {
     display: grid;
-    grid-template-columns: minmax(110px, 1fr) repeat(4, auto);
+    grid-template-columns: minmax(110px, 1fr) repeat(5, auto);
     gap: 10px;
     margin-top: auto;
     padding-top: 14px;
@@ -364,6 +364,11 @@ input {
 .actions .danger {
     color: #fff;
     background: #b94a48;
+}
+
+.actions .warn {
+    color: #06110f;
+    background: #ffd166;
 }
 
 #noteInput {

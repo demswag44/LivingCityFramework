@@ -58,6 +58,11 @@ Config.Dispatch = {
         ai_assigned = true,
         ai_responding = true,
         ai_arrived = true,
+        ai_investigating = true,
+        ai_staging = true,
+        ai_containing = true,
+        ai_clearing = true,
+        ai_cleared = true,
         ai_failed = true,
         closed = true,
         cancelled = true
@@ -111,6 +116,56 @@ Config.AIResponse = {
         dispatched = "AI police unit dispatched.",
         arrived = "AI police unit arrived on scene.",
         cleared = "AI police unit cleared."
+    }
+}
+
+Config.AIScene = {
+    enabled = true,
+    debug = true,
+
+    investigationDurationSeconds = 90,
+    autoClearEnabled = true,
+    autoClearAfterSeconds = 120,
+
+    stageRadius = 8.0,
+    lookAroundDuration = 8000,
+    walkSpeed = 1.0,
+
+    behaviors = {
+        investigate = {
+            label = "Investigating",
+            note = "AI officers are investigating the scene.",
+            durationSeconds = 90,
+            autoClear = true
+        },
+        stage = {
+            label = "Staging",
+            note = "AI officers are staging near the incident.",
+            durationSeconds = 120,
+            autoClear = true
+        },
+        contain = {
+            label = "Containing Scene",
+            note = "AI officers are containing the scene and awaiting support.",
+            durationSeconds = 150,
+            autoClear = false
+        }
+    },
+
+    threatBehavior = {
+        low = "investigate",
+        medium = "stage",
+        high = "stage",
+        deadly = "contain"
+    },
+
+    messages = {
+        investigating = "AI officers are investigating the scene.",
+        staging = "AI officers are staging near the scene.",
+        containing = "AI officers are containing the scene.",
+        cleared = "AI officers cleared the incident.",
+        clearRequested = "AI clear requested.",
+        invalidTask = "Invalid AI task."
     }
 }
 

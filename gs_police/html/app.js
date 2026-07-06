@@ -160,6 +160,7 @@ function renderDetail() {
     document.getElementById('detailAssignedBy').textContent = dispatch.assignedByName || 'None';
     document.getElementById('detailAssignedAt').textContent = formatOptionalTime(dispatch.assignedAt);
     document.getElementById('detailAiStatus').textContent = dispatch.aiStatus ? titleCase(dispatch.aiStatus) : 'None';
+    document.getElementById('detailAiScene').textContent = dispatch.aiSceneBehavior ? titleCase(dispatch.aiSceneBehavior) : 'None';
     document.getElementById('detailAiTask').textContent = dispatch.aiTaskId || 'None';
 
     const threatBadge = document.getElementById('threatBadge');
@@ -227,6 +228,10 @@ document.querySelectorAll('[data-ai-unit]').forEach((button) => {
     button.addEventListener('click', () => {
         doIncidentAction('assign_ai', { aiUnitType: button.dataset.aiUnit });
     });
+});
+
+document.getElementById('clearAiBtn').addEventListener('click', () => {
+    doIncidentAction('clear_ai');
 });
 
 document.getElementById('noteBtn').addEventListener('click', () => {

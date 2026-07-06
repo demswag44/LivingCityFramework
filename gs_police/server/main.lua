@@ -471,13 +471,45 @@ RegisterNetEvent("gs_police:server:updateAiUnitStatus", function(taskId, status,
         record.status =
             "ai_arrived"
         AddIncidentNote(record, "AI Dispatch", "AI unit arrived on scene.")
+    elseif status == "scene_investigate" then
+        record.status =
+            "ai_investigating"
+        dispatch.aiStatus =
+            "investigating"
+        dispatch.aiSceneBehavior =
+            data.behavior or "investigate"
+        AddIncidentNote(record, "AI Dispatch", "AI officers are investigating the scene.")
+    elseif status == "scene_stage" then
+        record.status =
+            "ai_staging"
+        dispatch.aiStatus =
+            "staging"
+        dispatch.aiSceneBehavior =
+            data.behavior or "stage"
+        AddIncidentNote(record, "AI Dispatch", "AI officers are staging near the incident.")
+    elseif status == "scene_contain" then
+        record.status =
+            "ai_containing"
+        dispatch.aiStatus =
+            "containing"
+        dispatch.aiSceneBehavior =
+            data.behavior or "contain"
+        AddIncidentNote(record, "AI Dispatch", "AI officers are containing the scene.")
+    elseif status == "clearing" then
+        record.status =
+            "ai_clearing"
+        dispatch.aiStatus =
+            "clearing"
+        AddIncidentNote(record, "AI Dispatch", "AI unit is clearing the incident.")
     elseif status == "failed" then
         record.status =
             "ai_failed"
         AddIncidentNote(record, "AI Dispatch", ("AI unit failed to respond: %s."):format(data.reason or "unknown"))
     elseif status == "cleared" then
         record.status =
-            "closed"
+            "ai_cleared"
+        dispatch.aiStatus =
+            "cleared"
         AddIncidentNote(record, "AI Dispatch", "AI unit cleared from incident.")
     end
 
@@ -1004,7 +1036,10 @@ QBCore.Functions.CreateCallback("gs_police:server:getMdtData", function(source, 
 end)
 
 QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(source, cb, payload)
-    if not CanUsePoliceRecords(source) then
+    local eventSource =
+        tonumber(source) or 0
+
+    if not CanUsePoliceRecords(eventSource) then
         cb({
             ok = false,
             message = (
@@ -1050,7 +1085,7 @@ QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(s
         local unit =
             tostring(payload.unit or "")
         local success, result =
-            AssignIncidentToUnit(source, incidentId, unit)
+            AssignIncidentToUnit(eventSource, incidentId, unit)
 
         if not success then
             local message =
@@ -1067,7 +1102,7 @@ QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(s
             result
     elseif action == "assign_ai" then
         local success, result =
-            RequestAiUnitForIncident(source, incidentId, payload.aiUnitType)
+            RequestAiUnitForIncident(eventSource, incidentId, payload.aiUnitType)
 
         if not success then
             local message =
@@ -1082,6 +1117,30 @@ QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(s
 
         record =
             result
+    elseif action == "clear_ai" then
+        if not record.dispatch
+        or not record.dispatch.aiTaskId then
+            cb({
+                success = false,
+                ok = false,
+                error = "invalidTask",
+                message = "No AI unit found for this incident."
+            })
+            return
+        end
+
+        TriggerClientEvent("gs_police:client:clearAiUnit", eventSource, record.dispatch.aiTaskId)
+        TriggerEvent("gs_police:server:updateAiUnitStatus", record.dispatch.aiTaskId, "clearing", {
+            incidentId = incidentId
+        })
+
+        cb({
+            success = true,
+            ok = true,
+            incident = SerializeIncidentRecord(record),
+            records = GetSerializedIncidentRecords()
+        })
+        return
     elseif action == "note" then
         local noteText =
             tostring(payload.note or "")
@@ -1091,7 +1150,7 @@ QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(s
             return
         end
 
-        AddIncidentNote(record, GetOfficerName(source), noteText)
+        AddIncidentNote(record, GetOfficerName(eventSource), noteText)
         TriggerEvent("gs_police:server:incidentUpdated", record)
     elseif action == "close" then
         record.status =
@@ -1470,6 +1529,56 @@ RegisterCommand("police_dispatchai", function(source, args)
     else
         Notify(commandSource, "AI unit requested for incident.", "success")
     end
+end, false)
+
+RegisterCommand("police_clearincidentai", function(source, args)
+    local eventSource =
+        tonumber(source) or 0
+
+    if not CanUsePoliceRecords(eventSource) then
+        DenyPoliceRecordAccess(eventSource)
+        return
+    end
+
+    local incidentId =
+        tonumber(args[1])
+
+    if not incidentId then
+        if eventSource > 0 then
+            Notify(eventSource, "Usage: /police_clearincidentai <incidentId>", "error")
+        else
+            print("[gs_police] Usage: police_clearincidentai <incidentId>")
+        end
+        return
+    end
+
+    local record =
+        GetIncidentRecordById(incidentId)
+
+    if not record
+    or not record.dispatch
+    or not record.dispatch.aiTaskId then
+        if eventSource > 0 then
+            Notify(eventSource, "No AI unit found for this incident.", "error")
+        else
+            print("[gs_police] No AI unit found for this incident.")
+        end
+        return
+    end
+
+    local taskId =
+        record.dispatch.aiTaskId
+
+    if eventSource > 0 then
+        TriggerClientEvent("gs_police:client:clearAiUnit", eventSource, taskId)
+        Notify(eventSource, "AI clear requested.", "success")
+    else
+        print(("[gs_police] AI clear requested for incident %s task %s"):format(incidentId, taskId))
+    end
+
+    TriggerEvent("gs_police:server:updateAiUnitStatus", taskId, "clearing", {
+        incidentId = incidentId
+    })
 end, false)
 
 RegisterCommand("police_noteincident", function(source, args)
