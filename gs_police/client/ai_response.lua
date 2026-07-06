@@ -153,6 +153,69 @@ local function StartPedSceneBehavior(ped, coords, behaviorKey)
     end
 end
 
+local function IsEmergencyAiResponse(task)
+    if not Config.EmergencyDriving
+    or Config.EmergencyDriving.enabled == false then
+        return false
+    end
+
+    local threatLevel =
+        task and task.threatLevel
+
+    if threatLevel then
+        threatLevel =
+            tostring(threatLevel):lower()
+    end
+
+    return threatLevel == "high"
+        or threatLevel == "deadly"
+end
+
+local function EmergencyDriveToCoords(driver, vehicle, coords)
+    if not driver
+    or not vehicle
+    or not coords then
+        return
+    end
+
+    if not DoesEntityExist(driver)
+    or not DoesEntityExist(vehicle) then
+        return
+    end
+
+    local speed =
+        (
+            Config.EmergencyDriving
+            and Config.EmergencyDriving.driveSpeed
+        )
+        or (
+            Config.AIResponse
+            and Config.AIResponse.drivingSpeed
+        )
+        or 30.0
+    local style =
+        (
+            Config.EmergencyDriving
+            and Config.EmergencyDriving.drivingStyle
+        )
+        or (
+            Config.AIResponse
+            and Config.AIResponse.drivingStyle
+        )
+        or 1074528293
+
+    TaskVehicleDriveToCoordLongrange(
+        driver,
+        vehicle,
+        coords.x,
+        coords.y,
+        coords.z,
+        speed,
+        style,
+        10.0
+    )
+end
+
 local function CleanupAIUnit(taskId, manualClose)
     local unit =
         ActiveAIUnits[taskId]
@@ -287,16 +350,20 @@ local function SpawnAIUnit(task)
     ActiveAIUnits[task.taskId] =
         unit
 
-    TaskVehicleDriveToCoordLongrange(
-        driver,
-        vehicle,
-        coords.x,
-        coords.y,
-        coords.z,
-        Config.AIResponse.drivingSpeed or 22.0,
-        Config.AIResponse.drivingStyle or 786603,
-        15.0
-    )
+    if IsEmergencyAiResponse(task) then
+        EmergencyDriveToCoords(driver, vehicle, coords)
+    else
+        TaskVehicleDriveToCoordLongrange(
+            driver,
+            vehicle,
+            coords.x,
+            coords.y,
+            coords.z,
+            Config.AIResponse.drivingSpeed or 22.0,
+            Config.AIResponse.drivingStyle or 786603,
+            15.0
+        )
+    end
 
     DebugPrint("spawned AI unit", task.taskId, "incident", task.incidentId)
 

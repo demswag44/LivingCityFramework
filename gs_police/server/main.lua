@@ -1121,6 +1121,29 @@ GetMovingTargetLocationForIncident = function(record)
     return NormalizeCoords(record.coords or record.location or record.position), nil
 end
 
+local function IsIncidentEligibleForPursuit(record)
+    if not record then
+        return false
+    end
+
+    local cfg =
+        Config.Pursuit or {}
+
+    if cfg.enabled == false then
+        return false
+    end
+
+    local incidentType =
+        record.type or record.incidentType
+
+    if cfg.trackIncidentTypes
+    and cfg.trackIncidentTypes[incidentType] then
+        return true
+    end
+
+    return record.movingTarget ~= nil
+end
+
 local function IsPatrolAvailableForDispatch(patrol)
     if not patrol then
         return false
@@ -1216,6 +1239,12 @@ local function DispatchNearestPatrolToIncident(src, incidentId)
         return false, "noIncident"
     end
 
+    local runtimeMovingTarget =
+        GetMovingTargetByIncidentId(record.id)
+    local eligibleForPursuit =
+        IsIncidentEligibleForPursuit(record)
+        and runtimeMovingTarget ~= nil
+
     local patrol, distance =
         FindNearestAvailablePatrol(coords, cfg.maxDispatchDistance or 450.0)
 
@@ -1229,9 +1258,9 @@ local function DispatchNearestPatrolToIncident(src, incidentId)
     ActivePatrolUnits[patrolId] =
         ActivePatrolUnits[patrolId] or patrol
     ActivePatrolUnits[patrolId].mode =
-        "responding"
+        eligibleForPursuit and "pursuit" or "responding"
     ActivePatrolUnits[patrolId].status =
-        "responding"
+        eligibleForPursuit and "pursuit_active" or "responding"
     ActivePatrolUnits[patrolId].assignedIncidentId =
         record.id
     ActivePatrolUnits[patrolId].assignedAt =
@@ -1252,7 +1281,7 @@ local function DispatchNearestPatrolToIncident(src, incidentId)
     record.dispatch.patrolId =
         patrolId
     record.dispatch.patrolStatus =
-        "responding"
+        eligibleForPursuit and "pursuit_active" or "responding"
     record.dispatch.patrolDistance =
         distance
     record.dispatch.patrolLastUpdate =
@@ -1261,34 +1290,71 @@ local function DispatchNearestPatrolToIncident(src, incidentId)
     record.assignedUnit =
         record.dispatch.assignedUnit
     record.status =
-        "patrol_dispatched"
+        eligibleForPursuit and "pursuit_active" or "patrol_dispatched"
 
-    AddIncidentNote(record, "Dispatch", ("Nearest patrol dispatched: %s."):format(record.dispatch.assignedUnit))
+    if eligibleForPursuit then
+        AddIncidentNote(record, "Dispatch", ("Patrol initiated pursuit of moving target %s."):format(runtimeMovingTarget.plate or "unknown"))
 
-    TriggerClientEvent("gs_police:client:dispatchPatrolToIncident", -1, {
-        patrolId = patrolId,
-        incidentId = record.id,
-        coords = coords,
-        incidentType = record.type or record.incidentType,
-        threatLevel = record.threatLevel or (
-            record.assessment
-            and record.assessment.finalThreat
-        ),
-        forcePolicy = record.forcePolicy or (
-            record.assessment
-            and record.assessment.forcePolicy
-        ),
-        response = record.response or (
-            record.assessment
-            and record.assessment.response
-        ),
-        movingTarget = movingTarget and BuildMovingTargetSummary(movingTarget) or nil
-    })
+        TriggerClientEvent("gs_police:client:startPatrolPursuit", -1, {
+            patrolId = patrolId,
+            incidentId = record.id,
+            targetId = runtimeMovingTarget.targetId,
+            plate = runtimeMovingTarget.plate,
+            lastKnownCoords = BuildMovingTargetSummary(runtimeMovingTarget).lastKnownCoords,
+            threatLevel = record.threatLevel or (
+                record.assessment
+                and record.assessment.finalThreat
+            ),
+            incidentType = record.type or record.incidentType
+        })
+    else
+        AddIncidentNote(record, "Dispatch", ("Nearest patrol dispatched: %s."):format(record.dispatch.assignedUnit))
+
+        TriggerClientEvent("gs_police:client:dispatchPatrolToIncident", -1, {
+            patrolId = patrolId,
+            incidentId = record.id,
+            coords = coords,
+            incidentType = record.type or record.incidentType,
+            threatLevel = record.threatLevel or (
+                record.assessment
+                and record.assessment.finalThreat
+            ),
+            forcePolicy = record.forcePolicy or (
+                record.assessment
+                and record.assessment.forcePolicy
+            ),
+            response = record.response or (
+                record.assessment
+                and record.assessment.response
+            ),
+            movingTarget = movingTarget and BuildMovingTargetSummary(movingTarget) or nil
+        })
+    end
 
     TriggerEvent("gs_police:server:incidentUpdated", record)
 
     return true, record
 end
+
+RegisterNetEvent("gs_police:server:requestMovingTargetSnapshot", function(targetId)
+    local src =
+        source
+
+    targetId =
+        tonumber(targetId)
+
+    if not targetId
+    or not MovingTargets
+    or not MovingTargets[targetId] then
+        TriggerClientEvent("gs_police:client:receiveMovingTargetSnapshot", src, targetId, nil)
+        return
+    end
+
+    local target =
+        MovingTargets[targetId]
+
+    TriggerClientEvent("gs_police:client:receiveMovingTargetSnapshot", src, targetId, BuildMovingTargetSummary(target))
+end)
 
 RegisterNetEvent("gs_police:server:patrolDispatchStatus", function(patrolId, status, data)
     if not patrolId
@@ -1315,6 +1381,9 @@ RegisterNetEvent("gs_police:server:patrolDispatchStatus", function(patrolId, sta
 
     record.dispatch =
         record.dispatch or {}
+    local previousPatrolStatus =
+        record.dispatch.patrolStatus
+
     record.dispatch.patrolId =
         patrolId
     record.dispatch.patrolStatus =
@@ -1325,7 +1394,33 @@ RegisterNetEvent("gs_police:server:patrolDispatchStatus", function(patrolId, sta
     if status == "responding" then
         record.status =
             "patrol_responding"
-        AddIncidentNote(record, "Dispatch", "Nearby patrol is responding.")
+        if previousPatrolStatus ~= status then
+            AddIncidentNote(record, "Dispatch", "Nearby patrol is responding.")
+        end
+    elseif status == "pursuit_active" then
+        record.status =
+            "pursuit_active"
+        record.dispatch.patrolStatus =
+            "pursuit_active"
+        if previousPatrolStatus ~= status then
+            AddIncidentNote(record, "Dispatch", "Patrol is pursuing moving target.")
+        end
+    elseif status == "pursuit_lost" then
+        record.status =
+            "pursuit_lost"
+        record.dispatch.patrolStatus =
+            "pursuit_lost"
+        if previousPatrolStatus ~= status then
+            AddIncidentNote(record, "Dispatch", "Pursuit lost moving target; using last known location.")
+        end
+    elseif status == "felony_stop" then
+        record.status =
+            "felony_stop"
+        record.dispatch.patrolStatus =
+            "felony_stop"
+        if previousPatrolStatus ~= status then
+            AddIncidentNote(record, "Dispatch", "Patrol is staging a felony stop.")
+        end
     elseif status == "arrived" then
         record.status =
             "patrol_arrived"
@@ -1336,7 +1431,11 @@ RegisterNetEvent("gs_police:server:patrolDispatchStatus", function(patrolId, sta
         AddIncidentNote(record, "Dispatch", "Nearby patrol cleared the incident.")
     elseif status == "returned" then
         record.status =
-            "patrol_cleared"
+            (
+                record.status == "pursuit_active"
+                or record.status == "pursuit_lost"
+                or record.status == "felony_stop"
+            ) and "pursuit_cleared" or "patrol_cleared"
         record.dispatch.patrolStatus =
             "returned_to_service"
         AddIncidentNote(record, "Dispatch", "Patrol returned to service.")
@@ -1514,6 +1613,10 @@ local function IsValidIncidentStatus(status)
         or status == "patrol_on_scene"
         or status == "patrol_cleared"
         or status == "patrol_returning"
+        or status == "pursuit_active"
+        or status == "pursuit_lost"
+        or status == "felony_stop"
+        or status == "pursuit_cleared"
         or status == "closed"
         or status == "cancelled"
 end

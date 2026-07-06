@@ -294,6 +294,9 @@ function renderDetail() {
     document.getElementById('detailAiTask').textContent = dispatch.aiTaskId || 'None';
     document.getElementById('detailPatrolId').textContent = dispatch.patrolId || 'None';
     document.getElementById('detailPatrolStatus').textContent = dispatch.patrolStatus ? titleCase(dispatch.patrolStatus) : 'None';
+    document.getElementById('detailPursuitStatus').textContent = ['pursuit_active', 'pursuit_lost', 'felony_stop', 'pursuit_cleared'].includes(record.status)
+        ? titleCase(record.status)
+        : 'None';
     document.getElementById('detailPatrolDistance').textContent = dispatch.patrolDistance
         ? `${Math.round(Number(dispatch.patrolDistance))}m`
         : 'None';

@@ -70,6 +70,10 @@ Config.Dispatch = {
         patrol_on_scene = true,
         patrol_cleared = true,
         patrol_returning = true,
+        pursuit_active = true,
+        pursuit_lost = true,
+        felony_stop = true,
+        pursuit_cleared = true,
         closed = true,
         cancelled = true
     },
@@ -129,7 +133,11 @@ Config.PatrolDispatch.statuses = {
     patrol_arrived = true,
     patrol_on_scene = true,
     patrol_cleared = true,
-    patrol_returning = true
+    patrol_returning = true,
+    pursuit_active = true,
+    pursuit_lost = true,
+    felony_stop = true,
+    pursuit_cleared = true
 }
 
 Config.PatrolDispatch.messages = {
@@ -171,6 +179,69 @@ Config.MovingTargets.messages = {
     targetLost = "Moving target lost. Using last known location.",
     targetExpired = "Moving target expired.",
     invalidTarget = "Invalid moving target."
+}
+
+Config.Pursuit = Config.Pursuit or {}
+
+Config.Pursuit.enabled = true
+Config.Pursuit.debug = true
+
+Config.Pursuit.followDistance = 18.0
+Config.Pursuit.arrivalDistance = 28.0
+Config.Pursuit.updateRouteIntervalMs = 2000
+
+Config.Pursuit.driveSpeed = 32.0
+Config.Pursuit.drivingStyle = 786603
+
+Config.Pursuit.useSiren = true
+Config.Pursuit.keepLightsOn = true
+
+Config.Pursuit.targetStoppedSpeedMps = 1.5
+Config.Pursuit.targetStoppedSeconds = 6
+Config.Pursuit.felonyStopDistance = 18.0
+
+Config.Pursuit.maxPursuitSeconds = 300
+Config.Pursuit.returnToPatrolAfterClear = true
+
+Config.Pursuit.trackIncidentTypes = {
+    stolen_vehicle_delivery = true,
+    stolen_vehicle_activity = true,
+    suspect_vehicle = true,
+    fleeing_vehicle = true
+}
+
+Config.Pursuit.messages = {
+    disabled = "Pursuit system is disabled.",
+    noMovingTarget = "Incident has no moving target.",
+    pursuitStarted = "Patrol is pursuing moving target.",
+    felonyStop = "Patrol is staging a felony stop.",
+    pursuitCleared = "Pursuit cleared.",
+    invalidIncident = "Invalid incident."
+}
+
+Config.EmergencyDriving = Config.EmergencyDriving or {}
+
+Config.EmergencyDriving.enabled = true
+Config.EmergencyDriving.debug = true
+
+Config.EmergencyDriving.driveSpeed = 36.0
+Config.EmergencyDriving.drivingStyle = 1074528293
+
+Config.EmergencyDriving.repathIntervalMs = 2500
+Config.EmergencyDriving.stuckCheckIntervalMs = 3000
+Config.EmergencyDriving.stuckSpeedThreshold = 1.0
+Config.EmergencyDriving.stuckSecondsBeforeRepath = 6
+
+Config.EmergencyDriving.moveOverEnabled = true
+Config.EmergencyDriving.moveOverRadius = 40.0
+Config.EmergencyDriving.moveOverCooldownMs = 2500
+
+Config.EmergencyDriving.overtakeOffsetDistance = 8.0
+Config.EmergencyDriving.overtakeForwardDistance = 35.0
+
+Config.EmergencyDriving.messages = {
+    repath = "Emergency unit repathing around traffic.",
+    stuck = "Emergency unit appears blocked."
 }
 
 Config.DispatchEscalation = {
