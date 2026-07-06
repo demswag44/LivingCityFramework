@@ -3,77 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Black Market</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Calculator</title>
     <link rel="stylesheet" href="shadowmarket.css">
 </head>
 <body>
-    <div id="app" class="hidden">
-        <div class="market-shell">
-            <aside class="sidebar">
-                <div class="brand">
-                    <span class="brand-kicker">Living City</span>
-                    <strong>BLACK MARKET</strong>
-                </div>
-
-                <button class="category-btn active" data-category="all">All Items</button>
-                <button class="category-btn" data-category="weapon">Weapons</button>
-                <button class="category-btn" data-category="ammo">Ammo</button>
-                <button class="category-btn" data-category="tool">Tools</button>
-
-                <div class="sidebar-note">
-                    Cash only.<br>
-                    No names. No refunds.
-                </div>
-
-                <div id="dealerRep" class="dealer-rep">Rep: 0</div>
-                <div id="rotationTimer" class="rotation-timer">Rotation: --:--</div>
-                <div id="relocationTimer" class="relocation-timer">Relocation: --:--</div>
-            </aside>
-
-            <main class="content">
-                <header class="market-header">
-                    <p class="eyebrow">Underground Dealer</p>
-                    <h1 id="marketTitle">Black Market</h1>
-                    <p id="marketSubtitle">No refunds. No questions.</p>
-                </header>
-
-                <section id="itemGrid" class="item-grid"></section>
-            </main>
-
-            <aside class="cart-panel">
-                <div class="cart-header">
-                    <h2>Cart</h2>
-                    <p>Review your order.</p>
-                    <div id="restockTimer" class="restock-timer">Restock: --:--</div>
-                </div>
-
-                <div id="cartItems" class="cart-items"></div>
-
-                <div class="cart-actions">
-                    <div class="cart-total-row">
-                        <span>Total</span>
-                        <strong id="cartTotal">$0</strong>
-                    </div>
-
-                    <button id="purchaseBtn" class="primary-btn">Complete Purchase</button>
-                    <button id="clearCartBtn" class="secondary-btn">Clear Cart</button>
-                    <button id="leaveBtn" class="danger-btn">Leave</button>
-                </div>
-            </aside>
-        </div>
-    </div>
-
-    <div id="shadowMarketApp" class="shadow-phone hidden">
+    <div id="shadowMarketApp" class="shadow-phone">
         <div class="shadow-phone-shell">
             <div class="calculator-mode" id="calculatorMode">
                 <div class="phone-topline">
                     <span id="shadowVisibleName">Calculator</span>
                     <button id="shadowCloseBtn" class="shadow-close" aria-label="Close">x</button>
                 </div>
-
                 <div id="calculatorDisplay" class="calculator-display">0</div>
-
                 <div class="calculator-grid">
                     <button data-calc="7">7</button>
                     <button data-calc="8">8</button>
@@ -90,27 +31,22 @@
                     <button data-calc="0" class="zero">0</button>
                     <button data-calc=".">.</button>
                 </div>
-
                 <div id="calculatorStatus" class="calculator-status"></div>
             </div>
-
             <div class="shadow-mode hidden" id="shadowMode">
                 <div class="phone-topline">
                     <span id="shadowHiddenName">ShadowMarket</span>
                     <button id="shadowExitBtn" class="shadow-close" aria-label="Close">x</button>
                 </div>
-
                 <div class="shadow-header">
                     <h1>ShadowMarket</h1>
                     <p>BackChannel Access Confirmed</p>
                 </div>
-
                 <div class="shadow-status">
                     <span id="shadowRep">Dealer Rep: 0</span>
                     <span id="shadowDealer">Active Dealer: unknown</span>
                     <span>Status: Online</span>
                 </div>
-
                 <div class="shadow-tile-grid" id="shadowDashboard">
                     <button class="shadow-tile" id="shadowBuyBtn"><strong>Buy</strong><span>Browse live stock</span></button>
                     <button class="shadow-tile" id="shadowSellBtn"><strong>Sell</strong><span>Vehicle Offers</span></button>
@@ -139,14 +75,11 @@
                         <button id="shadowClearCartBtn" class="shadow-secondary-btn">Clear Cart</button>
                     </div>
                 </aside>
-
                 <button id="shadowWipeBtn" class="shadow-wipe">Wipe App</button>
                 <div id="shadowStatus" class="shadow-message"></div>
             </div>
         </div>
     </div>
-
-    <script src="app.js"></script>
     <script src="shadowmarket.js"></script>
 </body>
 </html>

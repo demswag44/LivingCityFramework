@@ -86,9 +86,44 @@ body {
     line-height: 1.5;
 }
 
+.dealer-rep,
+.rotation-timer,
+.relocation-timer {
+    margin-top: 14px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    background: rgba(53, 240, 178, 0.08);
+    color: #35f0b2;
+    font-size: 12px;
+    font-weight: 900;
+}
+
 .content {
     padding: 28px;
     overflow-y: auto;
+    max-height: 680px;
+}
+
+.content::-webkit-scrollbar,
+.cart-items::-webkit-scrollbar {
+    width: 8px;
+}
+
+.content::-webkit-scrollbar-track,
+.cart-items::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 10px;
+}
+
+.content::-webkit-scrollbar-thumb,
+.cart-items::-webkit-scrollbar-thumb {
+    background: rgba(53, 240, 178, 0.45);
+    border-radius: 10px;
+}
+
+.content::-webkit-scrollbar-thumb:hover,
+.cart-items::-webkit-scrollbar-thumb:hover {
+    background: rgba(53, 240, 178, 0.75);
 }
 
 .market-header h1 {
@@ -118,7 +153,13 @@ body {
     background: rgba(255, 255, 255, 0.045);
     border: 1px solid rgba(53, 240, 178, 0.22);
     border-radius: 22px;
-    padding: 18px;
+    padding: 16px;
+    min-height: 300px;
+}
+
+.item-card.locked {
+    opacity: 0.55;
+    filter: grayscale(0.4);
 }
 
 .item-top {
@@ -163,8 +204,8 @@ body {
 
 .item-desc {
     color: #91bcb3;
-    min-height: 40px;
-    margin: 14px 0;
+    min-height: 38px;
+    margin: 12px 0;
     font-size: 13px;
 }
 
@@ -172,6 +213,7 @@ body {
     color: #35f0b2;
     font-size: 22px;
     font-weight: 900;
+    margin-top: 8px;
 }
 
 .item-stock {
@@ -183,6 +225,12 @@ body {
 
 .item-stock.out {
     color: #ff8a8a;
+}
+
+.lock-reason {
+    color: #ffcc66;
+    font-size: 13px;
+    margin-top: 10px;
 }
 
 .quantity-row {
@@ -288,6 +336,11 @@ body {
     flex: 1;
     overflow-y: auto;
     margin: 14px 0;
+    min-height: 0;
+}
+
+.cart-actions {
+    margin-top: auto;
 }
 
 .cart-line {

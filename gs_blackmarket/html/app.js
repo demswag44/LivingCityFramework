@@ -10,6 +10,9 @@ let state = {
     assetPath: "assets/",
     maxQuantity: 10,
     restockRemaining: 0,
+    rotationRemaining: 0,
+    relocationRemaining: 0,
+    reputation: 0,
 };
 
 function postToLua(name, data) {
@@ -41,6 +44,7 @@ window.addEventListener("DOMContentLoaded", function() {
     bindStaticButtons();
     renderCart();
     renderRestockTimer();
+    renderDealerMeta();
 
     setInterval(tickRestockTimer, 1000);
 
@@ -86,6 +90,9 @@ function openMarket(data) {
     state.assetPath = normalizeAssetPath(data.assetPath || "assets/");
     state.maxQuantity = Number(data.maxQuantity) || 10;
     state.restockRemaining = Number(data.restockRemaining) || 0;
+    state.rotationRemaining = Number(data.rotationRemaining) || 0;
+    state.relocationRemaining = Number(data.relocationRemaining) || 0;
+    state.reputation = Number(data.reputation) || 0;
 
     const title = document.getElementById("marketTitle");
     const subtitle = document.getElementById("marketSubtitle");
@@ -112,6 +119,7 @@ function openMarket(data) {
     renderItems();
     renderCart();
     renderRestockTimer();
+    renderDealerMeta();
 
     console.log("[gs_blackmarket] full shop UI opened");
     postToLua("uiOpened", { ok: true });
@@ -124,8 +132,11 @@ function closeMarket(sendCloseCallback) {
     state.cart = [];
     state.quantities = {};
     state.restockRemaining = 0;
+    state.rotationRemaining = 0;
+    state.relocationRemaining = 0;
     renderCart();
     renderRestockTimer();
+    renderDealerMeta();
 
     if (app) {
         app.classList.add("hidden");
@@ -241,9 +252,14 @@ function escapeHtml(value) {
 
 function getItemMaxQuantity(item) {
     const itemMax = Number(item.maxQuantity);
+    const locked = item.unlocked === false;
     const stockLimited = item.stock !== undefined && item.stock !== null;
     const stock = Number(item.stock);
     let max = state.maxQuantity || 10;
+
+    if (locked) {
+        return 0;
+    }
 
     if (itemMax > 0) {
         max = Math.min(max, itemMax);
@@ -334,12 +350,17 @@ function renderItems() {
         const hasStockLimit = item.stock !== undefined && item.stock !== null;
         const stock = Number(item.stock) || 0;
         const outOfStock = hasStockLimit && stock <= 0;
+        const locked = item.unlocked === false;
+        const disabled = outOfStock || locked;
         const stockLabel = hasStockLimit
             ? (outOfStock ? "Out of Stock" : `Stock: ${stock}`)
             : "Stock: Available";
+        const lockReason = locked
+            ? (item.lockReason || "Locked")
+            : "";
 
         const card = document.createElement("div");
-        card.className = "item-card";
+        card.className = `item-card ${locked ? "locked" : ""}`;
 
         card.innerHTML = `
             <div class="item-top">
@@ -353,14 +374,15 @@ function renderItems() {
             <div class="item-desc">${escapeHtml(description)}</div>
             <div class="item-price">${formatMoney(item.price)}</div>
             <div class="item-stock ${outOfStock ? "out" : ""}">${escapeHtml(stockLabel)}</div>
+            ${locked ? `<div class="lock-reason">Locked<br>${escapeHtml(lockReason)}</div>` : ""}
 
             <div class="quantity-row">
-                <button class="qty-btn" data-qty-minus="${itemIndex}" ${outOfStock ? "disabled" : ""}>-</button>
+                <button class="qty-btn" data-qty-minus="${itemIndex}" ${disabled ? "disabled" : ""}>-</button>
                 <span class="qty-value" data-qty-value="${itemIndex}">${quantity}</span>
-                <button class="qty-btn" data-qty-plus="${itemIndex}" ${outOfStock ? "disabled" : ""}>+</button>
+                <button class="qty-btn" data-qty-plus="${itemIndex}" ${disabled ? "disabled" : ""}>+</button>
             </div>
 
-            <button class="add-btn" data-add-index="${itemIndex}" ${outOfStock ? "disabled" : ""}>${outOfStock ? "Out of Stock" : "Add to Cart"}</button>
+            <button class="add-btn" data-add-index="${itemIndex}" ${disabled ? "disabled" : ""}>${locked ? "Locked" : (outOfStock ? "Out of Stock" : "Add to Cart")}</button>
         `;
 
         const img = card.querySelector("img");
@@ -405,6 +427,10 @@ function bindItemButtons() {
 function addToCart(itemIndex, quantity) {
     const item = state.items[itemIndex - 1];
     if (!item) {
+        return;
+    }
+
+    if (item.unlocked === false) {
         return;
     }
 
@@ -545,6 +571,51 @@ function renderRestockTimer() {
     timer.textContent = formatRestockTime(state.restockRemaining);
 }
 
+function renderDealerMeta() {
+    const rep = document.getElementById("dealerRep");
+    const rotation = document.getElementById("rotationTimer");
+    const relocation = document.getElementById("relocationTimer");
+
+    if (rep) {
+        rep.textContent = `Rep: ${Math.floor(Number(state.reputation) || 0)}`;
+    }
+
+    if (rotation) {
+        rotation.textContent = formatRotationTime(state.rotationRemaining);
+    }
+
+    if (relocation) {
+        relocation.textContent = formatRelocationTime(state.relocationRemaining);
+    }
+}
+
+function formatRotationTime(seconds) {
+    seconds = Math.max(0, Number(seconds) || 0);
+
+    if (seconds <= 0) {
+        return "Rotation soon";
+    }
+
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+
+    return `Rotation: ${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
+function formatRelocationTime(seconds) {
+    seconds = Math.max(0, Number(seconds) || 0);
+
+    if (seconds <= 0) {
+        return "Relocation: Unknown";
+    }
+
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = seconds % 60;
+
+    return `Relocation: ${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
 function tickRestockTimer() {
     if (!state.visible) {
         return;
@@ -554,5 +625,14 @@ function tickRestockTimer() {
         state.restockRemaining -= 1;
     }
 
+    if (state.rotationRemaining > 0) {
+        state.rotationRemaining -= 1;
+    }
+
+    if (state.relocationRemaining > 0) {
+        state.relocationRemaining -= 1;
+    }
+
     renderRestockTimer();
+    renderDealerMeta();
 }

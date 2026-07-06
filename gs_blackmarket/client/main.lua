@@ -15,6 +15,10 @@ local bmTestUiActive =
     false
 local knockRequestCooldowns =
     {}
+local activeLocations =
+    {}
+local isShadowMarketOpen =
+    false
 
 local function Notify(message, notificationType)
     if QBCore
@@ -101,6 +105,30 @@ local function GetLocationById(locationId)
     return nil
 end
 
+local function RefreshActiveLocations()
+    QBCore.Functions.TriggerCallback('gs_blackmarket:server:getActiveLocations', function(data)
+        activeLocations =
+            data or {}
+    end)
+end
+
+local function IsClientLocationActive(location)
+    if not location then
+        return false
+    end
+
+    if location.enabled == false then
+        return false
+    end
+
+    if Config.Relocation
+    and Config.Relocation.enabled then
+        return activeLocations[location.id] == true
+    end
+
+    return location.active ~= false
+end
+
 local function OpenBlackMarketMenu(location)
     local menu = {
         {
@@ -145,6 +173,30 @@ local function CloseBlackMarketUI()
     SetNuiFocusKeepInput(false)
     SendNUIMessage({
         action = 'close',
+    })
+end
+
+local function CloseShadowMarketUI()
+    isShadowMarketOpen =
+        false
+
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({
+        action = 'shadowmarketClose',
+    })
+end
+
+local function OpenShadowMarketPhone()
+    isShadowMarketOpen =
+        true
+
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({
+        action = 'shadowmarketOpen',
+        visibleName = (Config.PhoneApp and Config.PhoneApp.visibleName) or 'Calculator',
+        hiddenName = (Config.PhoneApp and Config.PhoneApp.hiddenName) or 'ShadowMarket',
     })
 end
 
@@ -254,6 +306,8 @@ local function OpenBlackMarketUI(location)
     end)
 end
 
+local OpenDealerDoorMenu
+
 local function KnockAtLocation(location)
     if isInteracting then
         return
@@ -309,7 +363,7 @@ local function KnockAtLocation(location)
 
                 Wait(400)
 
-                OpenBlackMarketUI(location)
+                OpenDealerDoorMenu(location)
             end)
 
         if not success then
@@ -320,6 +374,67 @@ local function KnockAtLocation(location)
 
         CleanupKnockState(ped)
     end)
+end
+
+local function OpenPickupOrder(location, orders)
+    local order =
+        orders
+        and orders[1]
+        or nil
+
+    if not order then
+        Notify('You have no pending orders.', 'error')
+        return
+    end
+
+    TriggerServerEvent('gs_blackmarket:server:pickupPhoneOrder', order.id, location.id)
+end
+
+function OpenDealerDoorMenu(location)
+    QBCore.Functions.TriggerCallback('gs_blackmarket:server:getPendingOrders', function(orders)
+        orders =
+            orders or {}
+
+        if #orders < 1 then
+            OpenBlackMarketUI(location)
+            return
+        end
+
+        local opened =
+            pcall(function()
+                exports['qb-menu']:openMenu({
+                    {
+                        header = 'Black Market',
+                        txt = 'The voice waits behind the door.',
+                        isMenuHeader = true,
+                    },
+                    {
+                        header = 'Open Shop',
+                        txt = 'Browse the dealer inventory.',
+                        params = {
+                            event = 'gs_blackmarket:client:openShopFromDoor',
+                            args = {
+                                locationId = location.id,
+                            },
+                        },
+                    },
+                    {
+                        header = 'Pick Up Order',
+                        txt = ('%s pending order%s'):format(#orders, #orders == 1 and '' or 's'),
+                        params = {
+                            event = 'gs_blackmarket:client:pickupOrderFromDoor',
+                            args = {
+                                locationId = location.id,
+                            },
+                        },
+                    },
+                })
+            end)
+
+        if not opened then
+            OpenBlackMarketUI(location)
+        end
+    end, location.id)
 end
 
 local function RequestKnock(location)
@@ -362,10 +477,15 @@ RegisterCommand('bm_unfreeze', function()
     SendNUIMessage({
         action = 'close',
     })
+    SendNUIMessage({
+        action = 'shadowmarketClose',
+    })
 
     isUiOpen =
         false
     nuiOpenAck =
+        false
+    isShadowMarketOpen =
         false
 
     Notify('Black market state reset.', 'success')
@@ -463,6 +583,31 @@ RegisterCommand('bm_nuistate', function()
     Notify(('NUI Ready: %s | Open Ack: %s'):format(tostring(nuiReady), tostring(nuiOpenAck)), 'primary')
 end, false)
 
+RegisterCommand('bm_locations', function()
+    QBCore.Functions.TriggerCallback('gs_blackmarket:server:getActiveLocations', function(data)
+        activeLocations =
+            data or {}
+
+        print('[gs_blackmarket] Active locations refreshed:')
+
+        for id, active in pairs(activeLocations) do
+            print(id, active)
+        end
+
+        QBCore.Functions.Notify('Black market active locations refreshed.', 'primary')
+    end)
+end, false)
+
+RegisterCommand('shadowmarket', function()
+    print('[gs_blackmarket] /shadowmarket executed')
+    OpenShadowMarketPhone()
+end, false)
+
+RegisterCommand('shadowmarket_close', function()
+    print('[gs_blackmarket] /shadowmarket_close executed')
+    CloseShadowMarketUI()
+end, false)
+
 RegisterNetEvent('gs_blackmarket:client:selectItem', function(data)
     if type(data) ~= 'table' then
         return
@@ -485,6 +630,40 @@ RegisterNetEvent('gs_blackmarket:client:knockApproved', function(locationId)
     end
 
     KnockAtLocation(location)
+end)
+
+RegisterNetEvent('gs_blackmarket:client:openShopFromDoor', function(data)
+    local location =
+        GetLocationById(data and data.locationId)
+
+    if not location then
+        Notify('Black market location error.', 'error')
+        return
+    end
+
+    OpenBlackMarketUI(location)
+end)
+
+RegisterNetEvent('gs_blackmarket:client:pickupOrderFromDoor', function(data)
+    local location =
+        GetLocationById(data and data.locationId)
+
+    if not location then
+        Notify('Black market location error.', 'error')
+        return
+    end
+
+    QBCore.Functions.TriggerCallback('gs_blackmarket:server:getPendingOrders', function(orders)
+        OpenPickupOrder(location, orders or {})
+    end, location.id)
+end)
+
+RegisterNetEvent('gs_blackmarket:client:refreshActiveLocations', function()
+    RefreshActiveLocations()
+end)
+
+RegisterNetEvent('gs_blackmarket:client:openShadowMarketPhone', function()
+    OpenShadowMarketPhone()
 end)
 
 RegisterNUICallback('close', function(_, cb)
@@ -537,6 +716,69 @@ RegisterNUICallback('purchase', function(data, cb)
     })
 end)
 
+RegisterNUICallback('shadowMarketOpened', function(_, cb)
+    isShadowMarketOpen =
+        true
+    SetNuiFocus(true, true)
+
+    cb({
+        ok = true,
+    })
+end)
+
+RegisterNUICallback('shadowMarketClose', function(_, cb)
+    CloseShadowMarketUI()
+
+    cb({
+        ok = true,
+    })
+end)
+
+RegisterNUICallback('shadowMarketUnlock', function(data, cb)
+    QBCore.Functions.TriggerCallback('gs_blackmarket:server:unlockShadowMarket', function(result)
+        cb(result or {
+            ok = false,
+            message = 'Nothing happens.',
+        })
+    end, data and data.code or '')
+end)
+
+RegisterNUICallback('shadowMarketWipe', function(_, cb)
+    QBCore.Functions.TriggerCallback('gs_blackmarket:server:wipeShadowMarket', function(result)
+        cb(result or {
+            ok = true,
+            message = 'App data wiped.',
+        })
+    end)
+end)
+
+RegisterNUICallback('shadowMarketGetData', function(_, cb)
+    QBCore.Functions.TriggerCallback('gs_blackmarket:server:getShadowMarketData', function(result)
+        cb(result or {
+            items = {},
+            pendingOrders = {},
+        })
+    end)
+end)
+
+RegisterNUICallback('shadowMarketPlaceOrder', function(data, cb)
+    QBCore.Functions.TriggerCallback('gs_blackmarket:server:placePhoneOrder', function(result)
+        cb(result or {
+            ok = false,
+            message = 'Order could not be placed.',
+        })
+    end, data and data.cart or {})
+end)
+
+RegisterNUICallback('shadowMarketAcceptVehicleOffer', function(data, cb)
+    QBCore.Functions.TriggerCallback('gs_blackmarket:server:acceptVehicleOffer', function(result)
+        cb(result or {
+            ok = false,
+            message = 'Vehicle offer could not be accepted.',
+        })
+    end, data and data.offerId or nil)
+end)
+
 AddEventHandler('onResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then
         return
@@ -559,9 +801,24 @@ AddEventHandler('onResourceStop', function(resourceName)
     SendNUIMessage({
         action = 'close',
     })
+    SendNUIMessage({
+        action = 'shadowmarketClose',
+    })
 
     isUiOpen =
         false
+    isShadowMarketOpen =
+        false
+end)
+
+CreateThread(function()
+    Wait(2000)
+    RefreshActiveLocations()
+
+    while true do
+        Wait(60000)
+        RefreshActiveLocations()
+    end
 end)
 
 CreateThread(function()
@@ -579,7 +836,7 @@ CreateThread(function()
             GetEntityCoords(ped)
 
         for _, location in ipairs(Config.BlackMarketLocations or {}) do
-            if location.enabled then
+            if IsClientLocationActive(location) then
                 local distance =
                     #(playerCoords - location.coords)
 

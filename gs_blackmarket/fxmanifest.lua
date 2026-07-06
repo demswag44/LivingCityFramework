@@ -25,8 +25,11 @@ ui_page 'html/index.html'
 
 files {
     'html/index.html',
+    'html/phone.html',
     'html/style.css',
     'html/app.js',
+    'html/shadowmarket.css',
+    'html/shadowmarket.js',
     'html/assets/*.png'
 }
 
