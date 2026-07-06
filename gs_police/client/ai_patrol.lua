@@ -37,6 +37,46 @@ local function CountZonePatrols(zoneKey)
     return count
 end
 
+local function ShouldUseEmergencyResponse(task)
+    local cfg =
+        Config.PatrolDispatch or {}
+    local emergency =
+        cfg.emergencyResponse or {}
+
+    if emergency.enabled == false then
+        return false
+    end
+
+    local threatLevel =
+        task and task.threatLevel
+    local incidentType =
+        task and task.incidentType
+
+    if threatLevel then
+        threatLevel =
+            tostring(threatLevel):lower()
+    end
+
+    if incidentType then
+        incidentType =
+            tostring(incidentType):lower()
+    end
+
+    if threatLevel
+    and emergency.useSirenForThreats
+    and emergency.useSirenForThreats[threatLevel] then
+        return true
+    end
+
+    if incidentType
+    and emergency.useSirenForIncidentTypes
+    and emergency.useSirenForIncidentTypes[incidentType] then
+        return true
+    end
+
+    return false
+end
+
 local function LoadModel(model)
     local hash =
         joaat(model)
@@ -127,6 +167,141 @@ local function DrivePatrolToWaypoint(patrol)
         "patrolling"
 end
 
+local function SendPatrolStatus(patrolId, patrol, statusOverride)
+    if not patrolId
+    or not patrol then
+        return
+    end
+
+    TriggerServerEvent("gs_police:server:patrolStatus", patrolId, {
+        zoneKey = patrol.zoneKey,
+        zoneLabel = patrol.zoneLabel,
+        status = statusOverride or patrol.status,
+        mode = patrol.mode or "patrol",
+        waypointIndex = patrol.waypointIndex,
+        assignedIncidentId = patrol.assignedIncidentId,
+        coords = GetPatrolCoords(patrol)
+    })
+end
+
+local function ReturnPatrolToRoute(patrolId)
+    local patrol =
+        ActivePatrols[patrolId]
+
+    if not patrol then
+        return false
+    end
+
+    if patrol.vehicle
+    and DoesEntityExist(patrol.vehicle) then
+        SetVehicleSiren(patrol.vehicle, false)
+        SetVehicleHasMutedSirens(patrol.vehicle, true)
+    end
+
+    patrol.mode =
+        "returning"
+    patrol.status =
+        "returning"
+    patrol.clearRequested =
+        true
+    patrol.onScene =
+        false
+    patrol.emergencyResponse =
+        false
+
+    if patrol.driver
+    and DoesEntityExist(patrol.driver) then
+        ClearPedTasks(patrol.driver)
+
+        if patrol.vehicle
+        and DoesEntityExist(patrol.vehicle) then
+            local sceneCfg =
+                Config.PatrolDispatch
+                and Config.PatrolDispatch.scene
+                or {}
+
+            TaskEnterVehicle(
+                patrol.driver,
+                patrol.vehicle,
+                sceneCfg.getBackInVehicleTimeoutMs or 10000,
+                -1,
+                1.0,
+                1,
+                0
+            )
+        end
+    end
+
+    SendPatrolStatus(patrolId, patrol, "returning")
+
+    CreateThread(function()
+        local sceneCfg =
+            Config.PatrolDispatch
+            and Config.PatrolDispatch.scene
+            or {}
+        local timeout =
+            GetGameTimer() + (sceneCfg.getBackInVehicleTimeoutMs or 10000)
+
+        while GetGameTimer() < timeout do
+            Wait(500)
+
+            if patrol.driver
+            and DoesEntityExist(patrol.driver)
+            and patrol.vehicle
+            and DoesEntityExist(patrol.vehicle)
+            and IsPedInVehicle(patrol.driver, patrol.vehicle, false) then
+                break
+            end
+        end
+
+        if patrol.driver
+        and DoesEntityExist(patrol.driver)
+        and patrol.vehicle
+        and DoesEntityExist(patrol.vehicle)
+        and not IsPedInVehicle(patrol.driver, patrol.vehicle, false) then
+            SetPedIntoVehicle(patrol.driver, patrol.vehicle, -1)
+        end
+
+        local incidentId =
+            patrol.assignedIncidentId
+
+        patrol.assignedIncidentId =
+            nil
+        patrol.assignedIncidentCoords =
+            nil
+        patrol.arrivedAt =
+            nil
+        patrol.returnAfter =
+            nil
+        patrol.onScene =
+            false
+
+        if patrol.previousWaypointIndex then
+            patrol.waypointIndex =
+                patrol.previousWaypointIndex
+        end
+
+        patrol.mode =
+            "patrol"
+        patrol.status =
+            "patrolling"
+
+        DrivePatrolToWaypoint(patrol)
+
+        SendPatrolStatus(patrolId, patrol, "patrolling")
+
+        if incidentId then
+            TriggerServerEvent("gs_police:server:patrolDispatchStatus", patrolId, "returned", {
+                incidentId = incidentId
+            })
+        end
+
+        DebugPrint("patrol returned to service", patrolId)
+    end)
+
+    return true
+end
+
 local function SpawnPatrolUnit(zoneKey)
     local cfg =
         Config.AIPatrol or {}
@@ -215,6 +390,16 @@ local function SpawnPatrolUnit(zoneKey)
         driver = driver,
         waypointIndex = 1,
         status = "patrolling",
+        mode = "patrol",
+        assignedIncidentId = nil,
+        assignedIncidentCoords = nil,
+        previousWaypointIndex = nil,
+        respondingStartedAt = nil,
+        arrivedAt = nil,
+        returnAfter = nil,
+        onScene = false,
+        clearRequested = false,
+        emergencyResponse = false,
         spawnedAt = GetGameTimer(),
         lastWaypointAt = GetGameTimer()
     }
@@ -226,13 +411,7 @@ local function SpawnPatrolUnit(zoneKey)
 
     DebugPrint("spawned patrol", patrolId, zoneKey)
 
-    TriggerServerEvent("gs_police:server:patrolStatus", patrolId, {
-        zoneKey = zoneKey,
-        zoneLabel = zone.label or zoneKey,
-        status = "patrolling",
-        waypointIndex = 1,
-        coords = GetPatrolCoords(ActivePatrols[patrolId])
-    })
+    SendPatrolStatus(patrolId, ActivePatrols[patrolId], "patrolling")
 
     return true, ActivePatrols[patrolId]
 end
@@ -293,48 +472,118 @@ CreateThread(function()
                 if zone
                 and zone.waypoints
                 and #zone.waypoints > 0 then
-                    TriggerServerEvent("gs_police:server:patrolStatus", patrolId, {
-                        zoneKey = patrol.zoneKey,
-                        zoneLabel = patrol.zoneLabel,
-                        status = patrol.status,
-                        waypointIndex = patrol.waypointIndex,
-                        coords = GetPatrolCoords(patrol)
-                    })
+                    SendPatrolStatus(patrolId, patrol)
 
-                    local waypoint =
-                        zone.waypoints[patrol.waypointIndex]
-
-                    if waypoint then
+                    if patrol.mode == "responding"
+                    and patrol.assignedIncidentCoords then
                         local vehicleCoords =
                             GetEntityCoords(patrol.vehicle)
+                        local targetCoords =
+                            vector3(
+                                patrol.assignedIncidentCoords.x,
+                                patrol.assignedIncidentCoords.y,
+                                patrol.assignedIncidentCoords.z
+                            )
                         local distance =
-                            #(vehicleCoords - waypoint)
+                            #(vehicleCoords - targetCoords)
 
-                        if distance <= (Config.AIPatrol.waypointArrivalDistance or 18.0) then
+                        if distance <= (
+                            Config.PatrolDispatch
+                            and Config.PatrolDispatch.arrivalDistance
+                            or 28.0
+                        ) then
+                            patrol.mode =
+                                "on_scene"
                             patrol.status =
-                                "waiting"
-                            patrol.lastWaypointAt =
+                                "on_scene"
+                            patrol.arrivedAt =
                                 GetGameTimer()
+                            patrol.onScene =
+                                true
+                            patrol.clearRequested =
+                                false
 
-                            Wait(Config.AIPatrol.waypointWaitMs or 2500)
+                            local sceneCfg =
+                                Config.PatrolDispatch
+                                and Config.PatrolDispatch.scene
+                                or {}
+                            local autoReturnSeconds =
+                                sceneCfg.autoReturnAfterSeconds or 60
 
-                            patrol.waypointIndex =
-                                patrol.waypointIndex + 1
+                            patrol.returnAfter =
+                                GetGameTimer() + (autoReturnSeconds * 1000)
 
-                            if patrol.waypointIndex > #zone.waypoints then
-                                patrol.waypointIndex =
-                                    1
+                            if patrol.vehicle
+                            and DoesEntityExist(patrol.vehicle) then
+                                if patrol.emergencyResponse
+                                and sceneCfg.keepEmergencyLightsOnArrival ~= false then
+                                    SetVehicleSiren(patrol.vehicle, true)
+                                    SetVehicleHasMutedSirens(patrol.vehicle, sceneCfg.muteSirenOnArrival ~= false)
+                                else
+                                    SetVehicleSiren(patrol.vehicle, false)
+                                    SetVehicleHasMutedSirens(patrol.vehicle, true)
+                                end
                             end
 
-                            DrivePatrolToWaypoint(patrol)
+                            TaskVehicleTempAction(patrol.driver, patrol.vehicle, 27, 2000)
+                            Wait(1500)
+                            TaskLeaveVehicle(patrol.driver, patrol.vehicle, 0)
+                            Wait(2000)
 
-                            TriggerServerEvent("gs_police:server:patrolStatus", patrolId, {
-                                zoneKey = patrol.zoneKey,
-                                zoneLabel = patrol.zoneLabel,
-                                status = "patrolling",
-                                waypointIndex = patrol.waypointIndex,
-                                coords = GetPatrolCoords(patrol)
+                            if DoesEntityExist(patrol.driver) then
+                                TaskStartScenarioInPlace(patrol.driver, "WORLD_HUMAN_COP_IDLES", 0, true)
+                            end
+
+                            SendPatrolStatus(patrolId, patrol, "on_scene")
+
+                            TriggerServerEvent("gs_police:server:patrolDispatchStatus", patrolId, "arrived", {
+                                incidentId = patrol.assignedIncidentId
                             })
+                        end
+                    elseif patrol.mode == "on_scene" then
+                        local sceneCfg =
+                            Config.PatrolDispatch
+                            and Config.PatrolDispatch.scene
+                            or {}
+
+                        if sceneCfg.autoReturnEnabled ~= false
+                        and patrol.returnAfter
+                        and GetGameTimer() >= patrol.returnAfter then
+                            if ReturnPatrolToRoute(patrolId) then
+                                SendPatrolStatus(patrolId, patrol, "returning")
+                            end
+                        else
+                            SendPatrolStatus(patrolId, patrol, "on_scene")
+                        end
+                    else
+                        local waypoint =
+                            zone.waypoints[patrol.waypointIndex]
+
+                        if waypoint then
+                            local vehicleCoords =
+                                GetEntityCoords(patrol.vehicle)
+                            local distance =
+                                #(vehicleCoords - waypoint)
+
+                            if distance <= (Config.AIPatrol.waypointArrivalDistance or 18.0) then
+                                patrol.status =
+                                    "waiting"
+                                patrol.lastWaypointAt =
+                                    GetGameTimer()
+
+                                Wait(Config.AIPatrol.waypointWaitMs or 2500)
+
+                                patrol.waypointIndex =
+                                    patrol.waypointIndex + 1
+
+                                if patrol.waypointIndex > #zone.waypoints then
+                                    patrol.waypointIndex =
+                                        1
+                                end
+
+                                DrivePatrolToWaypoint(patrol)
+                                SendPatrolStatus(patrolId, patrol, "patrolling")
+                            end
                         end
                     end
                 end
@@ -361,6 +610,118 @@ end)
 RegisterNetEvent("gs_police:client:clearPatrols", function()
     CleanupAllPatrols()
     QBCore.Functions.Notify(Config.AIPatrol.messages.cleared or "AI patrol units cleared.", "success")
+end)
+
+RegisterNetEvent("gs_police:client:dispatchPatrolToIncident", function(task)
+    if not task
+    or not task.patrolId
+    or not task.coords then
+        return
+    end
+
+    local patrol =
+        ActivePatrols[task.patrolId]
+
+    if not patrol then
+        return
+    end
+
+    if not patrol.vehicle
+    or not DoesEntityExist(patrol.vehicle)
+    or not patrol.driver
+    or not DoesEntityExist(patrol.driver) then
+        return
+    end
+
+    patrol.mode =
+        "responding"
+    patrol.status =
+        "responding"
+    patrol.assignedIncidentId =
+        task.incidentId
+    patrol.assignedIncidentCoords =
+        task.coords
+    patrol.previousWaypointIndex =
+        patrol.waypointIndex
+    patrol.respondingStartedAt =
+        GetGameTimer()
+    patrol.arrivedAt =
+        nil
+    patrol.returnAfter =
+        nil
+    patrol.onScene =
+        false
+    patrol.clearRequested =
+        false
+
+    local emergencyResponse =
+        ShouldUseEmergencyResponse(task)
+    local driveSpeed =
+        (
+            Config.PatrolDispatch
+            and Config.PatrolDispatch.driveSpeed
+            or 24.0
+        )
+
+    if Config.PatrolDispatch
+    and Config.PatrolDispatch.emergencyResponse
+    and Config.PatrolDispatch.emergencyResponse.normalDriveSpeed then
+        driveSpeed =
+            Config.PatrolDispatch.emergencyResponse.normalDriveSpeed
+    end
+
+    if emergencyResponse then
+        driveSpeed =
+            (
+                Config.PatrolDispatch
+                and Config.PatrolDispatch.emergencyResponse
+                and Config.PatrolDispatch.emergencyResponse.emergencyDriveSpeed
+            )
+            or 30.0
+    end
+
+    patrol.emergencyResponse =
+        emergencyResponse
+
+    if patrol.vehicle
+    and DoesEntityExist(patrol.vehicle) then
+        SetVehicleSiren(patrol.vehicle, emergencyResponse)
+        SetVehicleHasMutedSirens(patrol.vehicle, not emergencyResponse)
+    end
+
+    if not IsPedInVehicle(patrol.driver, patrol.vehicle, false) then
+        TaskEnterVehicle(patrol.driver, patrol.vehicle, 8000, -1, 1.0, 1, 0)
+        Wait(2000)
+    end
+
+    TaskVehicleDriveToCoordLongrange(
+        patrol.driver,
+        patrol.vehicle,
+        task.coords.x,
+        task.coords.y,
+        task.coords.z,
+        driveSpeed,
+        (
+            Config.PatrolDispatch
+            and Config.PatrolDispatch.drivingStyle
+            or 786603
+        ),
+        15.0
+    )
+
+    SendPatrolStatus(task.patrolId, patrol, "responding")
+
+    TriggerServerEvent("gs_police:server:patrolDispatchStatus", task.patrolId, "responding", {
+        incidentId = task.incidentId
+    })
+
+    QBCore.Functions.Notify("Patrol redirected to incident.", "primary")
+end)
+
+RegisterNetEvent("gs_police:client:returnPatrolToRoute", function(patrolId)
+    if ReturnPatrolToRoute(patrolId) then
+        QBCore.Functions.Notify("Patrol returning to route.", "success")
+    end
 end)
 
 RegisterCommand("police_patrolstate", function()

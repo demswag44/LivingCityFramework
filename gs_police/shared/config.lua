@@ -64,6 +64,12 @@ Config.Dispatch = {
         ai_clearing = true,
         ai_cleared = true,
         ai_failed = true,
+        patrol_dispatched = true,
+        patrol_responding = true,
+        patrol_arrived = true,
+        patrol_on_scene = true,
+        patrol_cleared = true,
+        patrol_returning = true,
         closed = true,
         cancelled = true
     },
@@ -75,6 +81,65 @@ Config.Dispatch = {
         invalidUnit = "Invalid unit.",
         dispatchDisabled = "Dispatch system is disabled."
     }
+}
+
+Config.PatrolDispatch = Config.PatrolDispatch or {}
+
+Config.PatrolDispatch.enabled = true
+Config.PatrolDispatch.debug = true
+
+Config.PatrolDispatch.maxDispatchDistance = 450.0
+Config.PatrolDispatch.arrivalDistance = 28.0
+Config.PatrolDispatch.driveSpeed = 24.0
+Config.PatrolDispatch.drivingStyle = 786603
+
+Config.PatrolDispatch.allowFallbackAiSpawn = false
+Config.PatrolDispatch.returnToPatrolAfterClear = true
+Config.PatrolDispatch.autoDispatchDetectedSignals = false
+
+Config.PatrolDispatch.emergencyResponse = {
+    enabled = true,
+
+    useSirenForThreats = {
+        high = true,
+        deadly = true
+    },
+
+    useSirenForIncidentTypes = {
+        shots_fired = true,
+        armed_suspect = true,
+        officer_needs_help = true
+    },
+
+    emergencyDriveSpeed = 30.0,
+    normalDriveSpeed = 24.0
+}
+
+Config.PatrolDispatch.scene = Config.PatrolDispatch.scene or {}
+
+Config.PatrolDispatch.scene.keepEmergencyLightsOnArrival = true
+Config.PatrolDispatch.scene.muteSirenOnArrival = true
+Config.PatrolDispatch.scene.autoReturnAfterSeconds = 60
+Config.PatrolDispatch.scene.autoReturnEnabled = true
+Config.PatrolDispatch.scene.getBackInVehicleTimeoutMs = 10000
+
+Config.PatrolDispatch.statuses = {
+    patrol_dispatched = true,
+    patrol_responding = true,
+    patrol_arrived = true,
+    patrol_on_scene = true,
+    patrol_cleared = true,
+    patrol_returning = true
+}
+
+Config.PatrolDispatch.messages = {
+    disabled = "Patrol dispatch is disabled.",
+    noIncident = "Invalid incident.",
+    noPatrolAvailable = "No available patrol unit nearby.",
+    patrolDispatched = "Nearby patrol dispatched.",
+    patrolArrived = "Patrol arrived on scene.",
+    patrolCleared = "Patrol cleared from incident.",
+    invalidPatrol = "Invalid patrol unit."
 }
 
 Config.DispatchEscalation = {

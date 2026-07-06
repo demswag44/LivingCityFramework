@@ -124,7 +124,8 @@ function renderPatrols() {
         row.className = 'patrol-row';
         row.innerHTML = `
             <strong>${escapeHtml(patrol.zoneLabel || patrol.zoneKey || 'Unknown Patrol')}</strong>
-            <span>${escapeHtml(patrol.status || 'unknown')} | waypoint ${escapeHtml(String(patrol.waypointIndex || '-'))}</span>
+            <span>${escapeHtml(patrol.status || 'unknown')} | ${escapeHtml(patrol.mode || 'patrol')} | waypoint ${escapeHtml(String(patrol.waypointIndex || '-'))}</span>
+            ${patrol.assignedIncidentId ? `<span>Incident #${escapeHtml(String(patrol.assignedIncidentId))}</span>` : ''}
         `;
         patrolList.appendChild(row);
     });
@@ -256,6 +257,11 @@ function renderDetail() {
     document.getElementById('detailAiStatus').textContent = dispatch.aiStatus ? titleCase(dispatch.aiStatus) : 'None';
     document.getElementById('detailAiScene').textContent = dispatch.aiSceneBehavior ? titleCase(dispatch.aiSceneBehavior) : 'None';
     document.getElementById('detailAiTask').textContent = dispatch.aiTaskId || 'None';
+    document.getElementById('detailPatrolId').textContent = dispatch.patrolId || 'None';
+    document.getElementById('detailPatrolStatus').textContent = dispatch.patrolStatus ? titleCase(dispatch.patrolStatus) : 'None';
+    document.getElementById('detailPatrolDistance').textContent = dispatch.patrolDistance
+        ? `${Math.round(Number(dispatch.patrolDistance))}m`
+        : 'None';
     document.getElementById('dispatchPlanLabel').textContent = dispatchPlan.label || 'None';
     document.getElementById('dispatchPlanAppliedBy').textContent = dispatchPlan.appliedBy || 'None';
     document.getElementById('dispatchPlanAppliedAt').textContent = formatOptionalTime(dispatchPlan.appliedAt);
@@ -334,6 +340,10 @@ document.querySelectorAll('[data-ai-unit]').forEach((button) => {
 
 document.getElementById('clearAiBtn').addEventListener('click', () => {
     doIncidentAction('clear_ai');
+});
+
+document.getElementById('dispatchPatrolBtn').addEventListener('click', () => {
+    doIncidentAction('dispatch_patrol');
 });
 
 document.getElementById('dispatchRecommendedBtn').addEventListener('click', () => {

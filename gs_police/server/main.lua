@@ -876,6 +876,8 @@ RegisterNetEvent("gs_police:server:patrolStatus", function(patrolId, data)
 
     ActivePatrolUnits[patrolId].patrolId =
         patrolId
+    ActivePatrolUnits[patrolId].owner =
+        tonumber(source) or 0
     ActivePatrolUnits[patrolId].updatedAt =
         os.time()
 end)
@@ -895,6 +897,246 @@ local function GetActivePatrolUnits()
 
     return units
 end
+
+local function IsPatrolAvailableForDispatch(patrol)
+    if not patrol then
+        return false
+    end
+
+    local mode =
+        patrol.mode or "patrol"
+    local status =
+        patrol.status or "unknown"
+
+    if mode ~= "patrol" then
+        return false
+    end
+
+    if status == "lost"
+    or status == "cleared" then
+        return false
+    end
+
+    if patrol.assignedIncidentId then
+        return false
+    end
+
+    return true
+end
+
+local function FindNearestAvailablePatrol(coords, maxDistance)
+    local nearest =
+        nil
+    local nearestDistance =
+        nil
+    local normalizedCoords =
+        NormalizeCoords(coords)
+
+    if not normalizedCoords then
+        return nil, nil
+    end
+
+    maxDistance =
+        maxDistance
+        or (
+            Config.PatrolDispatch
+            and Config.PatrolDispatch.maxDispatchDistance
+        )
+        or 450.0
+
+    for patrolId, patrol in pairs(ActivePatrolUnits or {}) do
+        local patrolCoords =
+            NormalizeCoords(patrol.coords)
+
+        if IsPatrolAvailableForDispatch(patrol)
+        and patrolCoords then
+            local distance =
+                DistanceBetweenCoords(normalizedCoords, patrolCoords)
+
+            if distance <= maxDistance
+            and (
+                not nearestDistance
+                or distance < nearestDistance
+            ) then
+                nearest =
+                    patrol
+                nearest.patrolId =
+                    patrolId
+                nearestDistance =
+                    distance
+            end
+        end
+    end
+
+    return nearest, nearestDistance
+end
+
+local function DispatchNearestPatrolToIncident(src, incidentId)
+    local cfg =
+        Config.PatrolDispatch or {}
+
+    if cfg.enabled == false then
+        return false, "disabled"
+    end
+
+    local record =
+        GetIncidentRecordById(incidentId)
+
+    if not record then
+        return false, "noIncident"
+    end
+
+    local coords =
+        NormalizeCoords(
+            record.coords
+            or record.position
+            or (
+                record.alertData
+                and record.alertData.coords
+            )
+        )
+
+    if not coords then
+        return false, "noIncident"
+    end
+
+    local patrol, distance =
+        FindNearestAvailablePatrol(coords, cfg.maxDispatchDistance or 450.0)
+
+    if not patrol then
+        return false, "noPatrolAvailable"
+    end
+
+    local patrolId =
+        patrol.patrolId
+
+    ActivePatrolUnits[patrolId] =
+        ActivePatrolUnits[patrolId] or patrol
+    ActivePatrolUnits[patrolId].mode =
+        "responding"
+    ActivePatrolUnits[patrolId].status =
+        "responding"
+    ActivePatrolUnits[patrolId].assignedIncidentId =
+        record.id
+    ActivePatrolUnits[patrolId].assignedAt =
+        os.time()
+
+    record.dispatch =
+        record.dispatch or {}
+    record.dispatch.assignedUnit =
+        patrol.zoneLabel or patrolId
+    record.dispatch.assignedType =
+        "patrol"
+    record.dispatch.assignedBy =
+        src
+    record.dispatch.assignedByName =
+        GetOfficerName(src)
+    record.dispatch.assignedAt =
+        os.time()
+    record.dispatch.patrolId =
+        patrolId
+    record.dispatch.patrolStatus =
+        "responding"
+    record.dispatch.patrolDistance =
+        distance
+    record.dispatch.patrolLastUpdate =
+        os.time()
+
+    record.assignedUnit =
+        record.dispatch.assignedUnit
+    record.status =
+        "patrol_dispatched"
+
+    AddIncidentNote(record, "Dispatch", ("Nearest patrol dispatched: %s."):format(record.dispatch.assignedUnit))
+
+    TriggerClientEvent("gs_police:client:dispatchPatrolToIncident", -1, {
+        patrolId = patrolId,
+        incidentId = record.id,
+        coords = coords,
+        incidentType = record.type or record.incidentType,
+        threatLevel = record.threatLevel or (
+            record.assessment
+            and record.assessment.finalThreat
+        ),
+        forcePolicy = record.forcePolicy or (
+            record.assessment
+            and record.assessment.forcePolicy
+        ),
+        response = record.response or (
+            record.assessment
+            and record.assessment.response
+        )
+    })
+
+    TriggerEvent("gs_police:server:incidentUpdated", record)
+
+    return true, record
+end
+
+RegisterNetEvent("gs_police:server:patrolDispatchStatus", function(patrolId, status, data)
+    if not patrolId
+    or not status then
+        return
+    end
+
+    data =
+        data or {}
+
+    local incidentId =
+        tonumber(data.incidentId)
+
+    if not incidentId then
+        return
+    end
+
+    local record =
+        GetIncidentRecordById(incidentId)
+
+    if not record then
+        return
+    end
+
+    record.dispatch =
+        record.dispatch or {}
+    record.dispatch.patrolId =
+        patrolId
+    record.dispatch.patrolStatus =
+        status
+    record.dispatch.patrolLastUpdate =
+        os.time()
+
+    if status == "responding" then
+        record.status =
+            "patrol_responding"
+        AddIncidentNote(record, "Dispatch", "Nearby patrol is responding.")
+    elseif status == "arrived" then
+        record.status =
+            "patrol_arrived"
+        AddIncidentNote(record, "Dispatch", "Nearby patrol arrived on scene.")
+    elseif status == "cleared" then
+        record.status =
+            "patrol_cleared"
+        AddIncidentNote(record, "Dispatch", "Nearby patrol cleared the incident.")
+    elseif status == "returned" then
+        record.status =
+            "patrol_cleared"
+        record.dispatch.patrolStatus =
+            "returned_to_service"
+        AddIncidentNote(record, "Dispatch", "Patrol returned to service.")
+
+        if ActivePatrolUnits
+        and ActivePatrolUnits[patrolId] then
+            ActivePatrolUnits[patrolId].mode =
+                "patrol"
+            ActivePatrolUnits[patrolId].status =
+                "patrolling"
+            ActivePatrolUnits[patrolId].assignedIncidentId =
+                nil
+        end
+    end
+
+    TriggerEvent("gs_police:server:incidentUpdated", record)
+end)
 
 local function GetPatrolDetectionSignals()
     local signals =
@@ -1049,6 +1291,12 @@ local function IsValidIncidentStatus(status)
         or status == "responding"
         or status == "ai_assigned"
         or status == "ai_responding"
+        or status == "patrol_dispatched"
+        or status == "patrol_responding"
+        or status == "patrol_arrived"
+        or status == "patrol_on_scene"
+        or status == "patrol_cleared"
+        or status == "patrol_returning"
         or status == "closed"
         or status == "cancelled"
 end
@@ -1470,6 +1718,12 @@ local function CreateIncidentFromPatrolDetection(signal, patrol)
     if record then
         AddIncidentNote(record, "Patrol", ("Detected by %s."):format(patrol.zoneLabel or patrol.patrolId or "AI Patrol"))
         TriggerEvent("gs_police:server:incidentUpdated", record)
+
+        if Config.PatrolDispatch
+        and Config.PatrolDispatch.autoDispatchDetectedSignals then
+            DispatchNearestPatrolToIncident(0, record.id)
+        end
+
         return true, record
     end
 
@@ -1692,6 +1946,23 @@ QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(s
                 and Config.DispatchEscalation.messages
                 and Config.DispatchEscalation.messages[result]
                 or "Unable to dispatch recommended unit."
+
+            cb({ ok = false, success = false, message = message, error = result })
+            return
+        end
+
+        record =
+            result
+    elseif action == "dispatch_patrol" then
+        local success, result =
+            DispatchNearestPatrolToIncident(eventSource, incidentId)
+
+        if not success then
+            local message =
+                Config.PatrolDispatch
+                and Config.PatrolDispatch.messages
+                and Config.PatrolDispatch.messages[result]
+                or "Unable to dispatch patrol."
 
             cb({ ok = false, success = false, message = message, error = result })
             return
@@ -2351,11 +2622,13 @@ RegisterCommand("police_patrols", function(source)
         print(("[gs_police] Active patrols: %s"):format(#patrols))
 
         for _, patrol in ipairs(patrols) do
-            print(("[gs_police] %s | zone=%s | status=%s | waypoint=%s"):format(
+            print(("[gs_police] %s | zone=%s | status=%s | mode=%s | waypoint=%s | incident=%s"):format(
                 patrol.patrolId,
                 patrol.zoneKey or "unknown",
                 patrol.status or "unknown",
-                tostring(patrol.waypointIndex or "n/a")
+                patrol.mode or "patrol",
+                tostring(patrol.waypointIndex or "n/a"),
+                tostring(patrol.assignedIncidentId or "none")
             ))
         end
         return
@@ -2370,11 +2643,96 @@ RegisterCommand("police_patrols", function(source)
                 ("%s | %s | %s | waypoint %s"):format(
                     patrol.patrolId,
                     patrol.zoneLabel or patrol.zoneKey or "unknown",
-                    patrol.status or "unknown",
+                    ("%s/%s"):format(patrol.status or "unknown", patrol.mode or "patrol"),
                     tostring(patrol.waypointIndex or "n/a")
                 )
             }
         })
+    end
+end, false)
+
+RegisterCommand("police_dispatchpatrol", function(source, args)
+    local eventSource =
+        tonumber(source) or 0
+
+    if not CanUsePoliceRecords(eventSource) then
+        DenyPoliceRecordAccess(eventSource)
+        return
+    end
+
+    local incidentId =
+        tonumber(args[1])
+
+    if not incidentId then
+        if eventSource > 0 then
+            Notify(eventSource, "Usage: /police_dispatchpatrol <incidentId>", "error")
+        else
+            print("[gs_police] Usage: police_dispatchpatrol <incidentId>")
+        end
+        return
+    end
+
+    local success, result =
+        DispatchNearestPatrolToIncident(eventSource, incidentId)
+
+    if not success then
+        local message =
+            Config.PatrolDispatch
+            and Config.PatrolDispatch.messages
+            and Config.PatrolDispatch.messages[result]
+            or "Unable to dispatch patrol."
+
+        if eventSource > 0 then
+            Notify(eventSource, message, "error")
+        else
+            print("[gs_police] " .. message)
+        end
+        return
+    end
+
+    if eventSource > 0 then
+        Notify(eventSource, Config.PatrolDispatch.messages.patrolDispatched or "Nearby patrol dispatched.", "success")
+    else
+        print("[gs_police] Nearby patrol dispatched.")
+    end
+end, false)
+
+RegisterCommand("police_returnpatrol", function(source, args)
+    local eventSource =
+        tonumber(source) or 0
+
+    if not CanUsePoliceRecords(eventSource) then
+        DenyPoliceRecordAccess(eventSource)
+        return
+    end
+
+    local patrolId =
+        args[1]
+
+    if not patrolId
+    or patrolId == "" then
+        if eventSource > 0 then
+            Notify(eventSource, "Usage: /police_returnpatrol <patrolId>", "error")
+        else
+            print("[gs_police] Usage: police_returnpatrol <patrolId>")
+        end
+        return
+    end
+
+    TriggerClientEvent("gs_police:client:returnPatrolToRoute", -1, patrolId)
+
+    if ActivePatrolUnits
+    and ActivePatrolUnits[patrolId] then
+        ActivePatrolUnits[patrolId].mode =
+            "returning"
+        ActivePatrolUnits[patrolId].status =
+            "returning"
+    end
+
+    if eventSource > 0 then
+        Notify(eventSource, "Patrol return requested.", "success")
+    else
+        print("[gs_police] Patrol return requested.")
     end
 end, false)
 
@@ -2551,6 +2909,10 @@ end)
 
 exports("GetActivePatrolUnits", function()
     return GetActivePatrolUnits()
+end)
+
+exports("DispatchNearestPatrolToIncident", function(src, incidentId)
+    return DispatchNearestPatrolToIncident(src or 0, incidentId)
 end)
 
 exports("AddPatrolDetectionSignal", function(signalType, coords, metadata)
