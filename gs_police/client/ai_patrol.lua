@@ -60,6 +60,116 @@ local function IsEmergencyDrivingActive(patrol)
         and Config.EmergencyDriving.enabled ~= false
 end
 
+local function IsEmergencyMode(mode)
+    return mode == "responding"
+        or mode == "pursuit"
+        or mode == "felony_stop"
+end
+
+local function ToVector3(coords)
+    if not coords then
+        return nil
+    end
+
+    if coords.x
+    and coords.y
+    and coords.z then
+        return vector3(coords.x + 0.0, coords.y + 0.0, coords.z + 0.0)
+    end
+
+    return nil
+end
+
+local function DistanceBetweenVectors(a, b)
+    local aVector =
+        ToVector3(a)
+    local bVector =
+        ToVector3(b)
+
+    if not aVector
+    or not bVector then
+        return 999999.0
+    end
+
+    return #(aVector - bVector)
+end
+
+local function GetPursuitSpeedForDistance(distance)
+    local cfg =
+        Config.PursuitTuning or {}
+    local speeds =
+        cfg.speedByDistance or {}
+
+    if speeds.stopApproach
+    and distance <= (speeds.stopApproach.distance or 18.0) then
+        return speeds.stopApproach.speed or 10.0, cfg.closeDrivingStyle or 786603
+    end
+
+    if speeds.close
+    and distance <= (speeds.close.distance or 35.0) then
+        return speeds.close.speed or 20.0, cfg.closeDrivingStyle or 786603
+    end
+
+    if speeds.medium
+    and distance <= (speeds.medium.distance or 75.0) then
+        return speeds.medium.speed or 28.0, cfg.drivingStyle or 1074528293
+    end
+
+    local speed =
+        (
+        speeds.far
+        and speeds.far.speed
+    )
+    or (
+        Config.Pursuit
+        and Config.Pursuit.driveSpeed
+    )
+    or 32.0
+    local style =
+        cfg.drivingStyle
+        or (
+            Config.Pursuit
+            and Config.Pursuit.drivingStyle
+        )
+        or 1074528293
+
+    return speed, style
+end
+
+local function IsTargetSnapshotFresh(snapshot)
+    if not snapshot then
+        return false
+    end
+
+    local felonyCfg =
+        Config.PursuitTuning
+        and Config.PursuitTuning.felonyStop
+        or {}
+
+    if felonyCfg.requireRecentTargetUpdate == false then
+        return true
+    end
+
+    local updatedAt =
+        tonumber(snapshot.updatedAt)
+
+    if not updatedAt then
+        return false
+    end
+
+    local nowSeconds =
+        math.floor(GetCloudTimeAsInt and GetCloudTimeAsInt() or 0)
+
+    if nowSeconds <= 0 then
+        return true
+    end
+
+    local maxAge =
+        felonyCfg.maxTargetUpdateAgeSeconds or 8
+
+    return (nowSeconds - updatedAt) <= maxAge
+end
+
 local function GetEntityForwardOffset(entity, forwardDistance, rightDistance)
     local coords =
         GetEntityCoords(entity)
@@ -81,6 +191,41 @@ local function GetEntityForwardOffset(entity, forwardDistance, rightDistance)
         coords.y + (forwardY * forwardDistance) + (rightY * rightDistance),
         coords.z
     )
+end
+
+local function GetFelonyStopParkingPoint(targetCoords, targetHeading)
+    local arrivalCfg =
+        Config.PursuitTuning
+        and Config.PursuitTuning.arrival
+        or {}
+    local behind =
+        arrivalCfg.parkBehindDistance or 13.0
+    local side =
+        arrivalCfg.parkSideOffset or -3.5
+
+    targetHeading =
+        tonumber(targetHeading) or 0.0
+
+    local headingRad =
+        math.rad(targetHeading)
+    local forwardX =
+        math.sin(headingRad) * -1.0
+    local forwardY =
+        math.cos(headingRad)
+    local rightX =
+        math.cos(headingRad)
+    local rightY =
+        math.sin(headingRad)
+    local x =
+        targetCoords.x - (forwardX * behind) + (rightX * side)
+    local y =
+        targetCoords.y - (forwardY * behind) + (rightY * side)
+    local z =
+        targetCoords.z
+    local policeHeading =
+        targetHeading + (arrivalCfg.parkAngleOffset or 8.0)
+
+    return vector4(x, y, z, policeHeading)
 end
 
 local function EncourageTrafficMoveOver(policeVehicle)
@@ -383,6 +528,10 @@ local function ReturnPatrolToRoute(patrolId)
         nil
     patrol.lastKnownSpeed =
         0.0
+    patrol.repathAttempts =
+        0
+    patrol.felonyStopFinalized =
+        false
 
     if patrol.driver
     and DoesEntityExist(patrol.driver) then
@@ -454,6 +603,10 @@ local function ReturnPatrolToRoute(patrolId)
             nil
         patrol.lastKnownSpeed =
             0.0
+        patrol.repathAttempts =
+            0
+        patrol.felonyStopFinalized =
+            false
         patrol.arrivedAt =
             nil
         patrol.returnAfter =
@@ -590,6 +743,8 @@ local function SpawnPatrolUnit(zoneKey)
         lastStuckCheck = 0,
         stuckSince = nil,
         lastKnownSpeed = 0.0,
+        repathAttempts = 0,
+        felonyStopFinalized = false,
         spawnedAt = GetGameTimer(),
         lastWaypointAt = GetGameTimer()
     }
@@ -665,14 +820,22 @@ CreateThread(function()
                     SendPatrolStatus(patrolId, patrol)
 
                     if IsEmergencyDrivingActive(patrol)
+                    and IsEmergencyMode(patrol.mode)
                     and patrol.vehicle
                     and DoesEntityExist(patrol.vehicle) then
                         local now =
                             GetGameTimer()
+                        local stuckCfg =
+                            (
+                                Config.PursuitTuning
+                                and Config.PursuitTuning.stuck
+                            )
+                            or {}
 
                         EncourageTrafficMoveOver(patrol.vehicle)
 
-                        if now - (patrol.lastStuckCheck or 0) >= (Config.EmergencyDriving.stuckCheckIntervalMs or 3000) then
+                        if stuckCfg.enabled ~= false
+                        and now - (patrol.lastStuckCheck or 0) >= (stuckCfg.checkIntervalMs or Config.EmergencyDriving.stuckCheckIntervalMs or 3000) then
                             patrol.lastStuckCheck =
                                 now
 
@@ -682,7 +845,7 @@ CreateThread(function()
                             patrol.lastKnownSpeed =
                                 speed
 
-                            if speed <= (Config.EmergencyDriving.stuckSpeedThreshold or 1.0) then
+                            if speed <= (stuckCfg.minSpeed or Config.EmergencyDriving.stuckSpeedThreshold or 1.0) then
                                 patrol.stuckSince =
                                     patrol.stuckSince or now
                             else
@@ -692,17 +855,20 @@ CreateThread(function()
                         end
 
                         if patrol.stuckSince
-                        and now - patrol.stuckSince >= ((Config.EmergencyDriving.stuckSecondsBeforeRepath or 6) * 1000)
-                        and now - (patrol.lastEmergencyRepath or 0) >= (Config.EmergencyDriving.repathIntervalMs or 2500) then
+                        and now - patrol.stuckSince >= ((stuckCfg.stuckAfterSeconds or Config.EmergencyDriving.stuckSecondsBeforeRepath or 6) * 1000)
+                        and now - (patrol.lastEmergencyRepath or 0) >= (Config.EmergencyDriving.repathIntervalMs or 2500)
+                        and ((patrol.repathAttempts or 0) < (stuckCfg.maxRepathAttempts or 5)) then
                             patrol.lastEmergencyRepath =
                                 now
                             patrol.stuckSince =
                                 nil
+                            patrol.repathAttempts =
+                                (patrol.repathAttempts or 0) + 1
 
                             local offset =
-                                Config.EmergencyDriving.overtakeOffsetDistance or 8.0
+                                stuckCfg.repathSideOffset or Config.EmergencyDriving.overtakeOffsetDistance or 8.0
                             local forward =
-                                Config.EmergencyDriving.overtakeForwardDistance or 35.0
+                                stuckCfg.repathForwardDistance or Config.EmergencyDriving.overtakeForwardDistance or 35.0
                             local bypass =
                                 GetEntityForwardOffset(patrol.vehicle, forward, offset)
 
@@ -722,13 +888,23 @@ CreateThread(function()
                             GetGameTimer()
                         local maxPursuitMs =
                             ((Config.Pursuit and Config.Pursuit.maxPursuitSeconds) or 300) * 1000
+                        local routeUpdateInterval =
+                            (
+                                Config.PursuitTuning
+                                and Config.PursuitTuning.routeUpdateIntervalMs
+                            )
+                            or (
+                                Config.Pursuit
+                                and Config.Pursuit.updateRouteIntervalMs
+                            )
+                            or 2000
 
                         SendPatrolStatus(patrolId, patrol, "pursuit_active")
 
                         if pursuit.startedAt
                         and now - pursuit.startedAt >= maxPursuitMs then
                             ReturnPatrolToRoute(patrolId)
-                        elseif now - (pursuit.lastRouteUpdate or 0) >= ((Config.Pursuit and Config.Pursuit.updateRouteIntervalMs) or 2000) then
+                        elseif now - (pursuit.lastRouteUpdate or 0) >= routeUpdateInterval then
                             pursuit.lastRouteUpdate =
                                 now
 
@@ -744,11 +920,15 @@ CreateThread(function()
                                     snapshot.lastKnownCoords
                                 pursuit.speed =
                                     tonumber(snapshot.speed) or 0.0
+                                pursuit.heading =
+                                    tonumber(snapshot.heading) or pursuit.heading or 0.0
                                 pursuit.updatedAt =
                                     snapshot.updatedAt
 
                                 local targetCoords =
                                     snapshot.lastKnownCoords
+                                local targetVector =
+                                    ToVector3(targetCoords)
 
                                 if not IsPedInVehicle(patrol.driver, patrol.vehicle, false) then
                                     TaskEnterVehicle(patrol.driver, patrol.vehicle, 8000, -1, 1.0, 1, 0)
@@ -761,48 +941,100 @@ CreateThread(function()
                                     SetVehicleHasMutedSirens(patrol.vehicle, false)
                                 end
 
-                                local targetVector =
-                                    vector3(targetCoords.x, targetCoords.y, targetCoords.z)
+                                if targetVector
+                                and patrol.vehicle
+                                and DoesEntityExist(patrol.vehicle) then
+                                    local patrolCoords =
+                                        GetEntityCoords(patrol.vehicle)
+                                    local distance =
+                                        #(patrolCoords - targetVector)
+                                    local driveSpeed, drivingStyle =
+                                        GetPursuitSpeedForDistance(distance)
+                                    local stoppedSpeedMph =
+                                        ((Config.Pursuit and Config.Pursuit.targetStoppedSpeedMps) or 0.8) * 2.236936
+                                    local arrivalCfg =
+                                        Config.PursuitTuning
+                                        and Config.PursuitTuning.arrival
+                                        or {}
+                                    local felonyCfg =
+                                        Config.PursuitTuning
+                                        and Config.PursuitTuning.felonyStop
+                                        or {}
+                                    local triggerDistance =
+                                        felonyCfg.triggerDistance or 35.0
+                                    local targetSpeed =
+                                        tonumber(snapshot.speed) or 999.0
+                                    local targetFresh =
+                                        IsTargetSnapshotFresh(snapshot)
 
-                                if IsEmergencyDrivingActive(patrol) then
-                                    EmergencyDriveToCoords(patrol, targetVector)
-                                else
-                                    TaskVehicleDriveToCoordLongrange(
-                                        patrol.driver,
-                                        patrol.vehicle,
-                                        targetCoords.x,
-                                        targetCoords.y,
-                                        targetCoords.z,
-                                        (Config.Pursuit and Config.Pursuit.driveSpeed) or 32.0,
-                                        (Config.Pursuit and Config.Pursuit.drivingStyle) or 786603,
-                                        (Config.Pursuit and Config.Pursuit.followDistance) or 18.0
-                                    )
-                                end
+                                    pursuit.lastDistance =
+                                        distance
 
-                                local stoppedSpeedMph =
-                                    ((Config.Pursuit and Config.Pursuit.targetStoppedSpeedMps) or 1.5) * 2.236936
+                                    local patrolCloseEnough =
+                                        distance <= triggerDistance
+                                    local canConsiderFelonyStop =
+                                        targetFresh
+                                        and targetSpeed <= stoppedSpeedMph
+                                        and (
+                                            felonyCfg.requireCloseDistance == false
+                                            or patrolCloseEnough
+                                        )
 
-                                if (pursuit.speed or 0.0) <= stoppedSpeedMph then
-                                    if not pursuit.targetStoppedSince then
+                                    if canConsiderFelonyStop then
                                         pursuit.targetStoppedSince =
-                                            now
+                                            pursuit.targetStoppedSince or now
+                                    else
+                                        pursuit.targetStoppedSince =
+                                            nil
                                     end
 
-                                    if now - pursuit.targetStoppedSince >= (((Config.Pursuit and Config.Pursuit.targetStoppedSeconds) or 6) * 1000) then
-                                        patrol.mode =
-                                            "felony_stop"
-                                        patrol.status =
-                                            "felony_stop"
-                                        pursuit.felonyStopStarted =
-                                            true
+                                    if not canConsiderFelonyStop
+                                    or distance > (arrivalCfg.arrivalDistance or 18.0) then
+                                        TaskVehicleDriveToCoordLongrange(
+                                            patrol.driver,
+                                            patrol.vehicle,
+                                            targetVector.x,
+                                            targetVector.y,
+                                            targetVector.z,
+                                            driveSpeed,
+                                            drivingStyle,
+                                            (
+                                                Config.PursuitTuning
+                                                and Config.PursuitTuning.followDistance
+                                            )
+                                            or (
+                                                Config.Pursuit
+                                                and Config.Pursuit.followDistance
+                                            )
+                                            or 22.0
+                                        )
 
-                                        TriggerServerEvent("gs_police:server:patrolDispatchStatus", patrolId, "felony_stop", {
-                                            incidentId = patrol.assignedIncidentId
-                                        })
+                                        if IsEmergencyDrivingActive(patrol) then
+                                            EncourageTrafficMoveOver(patrol.vehicle)
+                                        end
                                     end
-                                else
-                                    pursuit.targetStoppedSince =
-                                        nil
+
+                                    if pursuit.targetStoppedSince then
+                                        local stoppedSeconds =
+                                            (Config.Pursuit and Config.Pursuit.targetStoppedSeconds) or 6
+
+                                        if now - pursuit.targetStoppedSince >= (stoppedSeconds * 1000) then
+                                            patrol.mode =
+                                                "felony_stop"
+                                            patrol.status =
+                                                "felony_stop"
+                                            pursuit.felonyStopStarted =
+                                                true
+                                            pursuit.targetHeading =
+                                                tonumber(snapshot.heading) or pursuit.heading or 0.0
+                                            pursuit.lastKnownCoords =
+                                                snapshot.lastKnownCoords
+
+                                            TriggerServerEvent("gs_police:server:patrolDispatchStatus", patrolId, "felony_stop", {
+                                                incidentId = patrol.assignedIncidentId
+                                            })
+                                        end
+                                    end
                                 end
                             else
                                 patrol.status =
@@ -815,43 +1047,67 @@ CreateThread(function()
                         end
                     elseif patrol.mode == "felony_stop"
                     and patrol.pursuit then
-                        local targetCoords =
-                            patrol.pursuit.lastKnownCoords
+                        local pursuit =
+                            patrol.pursuit
+                        local targetVector =
+                            ToVector3(pursuit.lastKnownCoords)
 
-                        if targetCoords then
+                        if targetVector then
+                            local arrivalCfg =
+                                Config.PursuitTuning
+                                and Config.PursuitTuning.arrival
+                                or {}
+                            local felonyCfg =
+                                Config.PursuitTuning
+                                and Config.PursuitTuning.felonyStop
+                                or {}
+                            local parking =
+                                GetFelonyStopParkingPoint(
+                                    targetVector,
+                                    pursuit.targetHeading or pursuit.heading or 0.0
+                                )
                             local vehicleCoords =
                                 GetEntityCoords(patrol.vehicle)
-                            local targetVector =
-                                vector3(targetCoords.x, targetCoords.y, targetCoords.z)
+                            local parkingVector =
+                                vector3(parking.x, parking.y, parking.z)
                             local distance =
-                                #(vehicleCoords - targetVector)
+                                #(vehicleCoords - parkingVector)
 
-                            if distance > ((Config.Pursuit and Config.Pursuit.felonyStopDistance) or 18.0) then
-                                if IsEmergencyDrivingActive(patrol) then
-                                    EmergencyDriveToCoords(patrol, targetVector)
-                                else
-                                    TaskVehicleDriveToCoordLongrange(
-                                        patrol.driver,
-                                        patrol.vehicle,
-                                        targetCoords.x,
-                                        targetCoords.y,
-                                        targetCoords.z,
-                                        (Config.Pursuit and Config.Pursuit.driveSpeed) or 32.0,
-                                        (Config.Pursuit and Config.Pursuit.drivingStyle) or 786603,
-                                        (Config.Pursuit and Config.Pursuit.felonyStopDistance) or 18.0
+                            if distance > (felonyCfg.finalParkingDistance or arrivalCfg.finalStopDistance or 12.0) then
+                                TaskVehicleDriveToCoordLongrange(
+                                    patrol.driver,
+                                    patrol.vehicle,
+                                    parking.x,
+                                    parking.y,
+                                    parking.z,
+                                    10.0,
+                                    (
+                                        Config.PursuitTuning
+                                        and Config.PursuitTuning.closeDrivingStyle
                                     )
-                                end
-                            elseif not patrol.pursuit.felonyStopStaged then
-                                patrol.pursuit.felonyStopStaged =
+                                    or 786603,
+                                    8.0
+                                )
+                            elseif not patrol.felonyStopFinalized then
+                                patrol.felonyStopFinalized =
+                                    true
+                                pursuit.felonyStopStaged =
                                     true
 
                                 if patrol.vehicle
                                 and DoesEntityExist(patrol.vehicle) then
-                                    SetVehicleSiren(patrol.vehicle, not Config.Pursuit or Config.Pursuit.keepLightsOn ~= false)
-                                    SetVehicleHasMutedSirens(patrol.vehicle, true)
+                                    SetVehicleSiren(patrol.vehicle, arrivalCfg.keepLightsOn ~= false)
+                                    SetVehicleHasMutedSirens(patrol.vehicle, arrivalCfg.muteSiren ~= false)
+                                    SetEntityHeading(patrol.vehicle, parking.w)
                                 end
 
-                                TaskVehicleTempAction(patrol.driver, patrol.vehicle, 27, 2000)
+                                TaskVehicleTempAction(
+                                    patrol.driver,
+                                    patrol.vehicle,
+                                    27,
+                                    arrivalCfg.useTempBrakeMs or 2500
+                                )
+
                                 Wait(1500)
 
                                 if patrol.driver
@@ -875,6 +1131,15 @@ CreateThread(function()
                                     true
                                 patrol.returnAfter =
                                     GetGameTimer() + (((Config.PatrolDispatch and Config.PatrolDispatch.scene and Config.PatrolDispatch.scene.autoReturnAfterSeconds) or 60) * 1000)
+
+                                TriggerServerEvent("gs_police:server:patrolStatus", patrolId, {
+                                    zoneKey = patrol.zoneKey,
+                                    zoneLabel = patrol.zoneLabel,
+                                    status = "felony_stop",
+                                    mode = "on_scene",
+                                    assignedIncidentId = patrol.assignedIncidentId,
+                                    coords = GetPatrolCoords(patrol)
+                                })
 
                                 TriggerServerEvent("gs_police:server:patrolDispatchStatus", patrolId, "felony_stop", {
                                     incidentId = patrol.assignedIncidentId
@@ -1087,6 +1352,10 @@ RegisterNetEvent("gs_police:client:startPatrolPursuit", function(task)
         nil
     patrol.lastKnownSpeed =
         0.0
+    patrol.repathAttempts =
+        0
+    patrol.felonyStopFinalized =
+        false
 
     if patrol.vehicle
     and DoesEntityExist(patrol.vehicle) then
@@ -1155,6 +1424,10 @@ RegisterNetEvent("gs_police:client:dispatchPatrolToIncident", function(task)
         nil
     patrol.lastKnownSpeed =
         0.0
+    patrol.repathAttempts =
+        0
+    patrol.felonyStopFinalized =
+        false
 
     local emergencyResponse =
         ShouldUseEmergencyResponse(task)
@@ -1250,6 +1523,36 @@ RegisterCommand("police_patrolstate", function()
     end
 
     QBCore.Functions.Notify(("Active AI patrols: %s"):format(count), "primary")
+end, false)
+
+RegisterCommand("police_pursuitdebug", function()
+    for patrolId, patrol in pairs(ActivePatrols) do
+        if patrol.pursuit then
+            local felonyCfg =
+                Config.PursuitTuning
+                and Config.PursuitTuning.felonyStop
+                or {}
+            local triggerDistance =
+                felonyCfg.triggerDistance or 35.0
+            local closeEnough =
+                patrol.pursuit.lastDistance
+                and patrol.pursuit.lastDistance <= triggerDistance
+
+            print(("[gs_police:pursuit_debug] patrol=%s mode=%s status=%s target=%s dist=%s triggerDist=%s closeEnough=%s speed=%s stoppedSince=%s"):format(
+                patrolId,
+                tostring(patrol.mode),
+                tostring(patrol.status),
+                tostring(patrol.pursuit.targetId),
+                tostring(patrol.pursuit.lastDistance),
+                tostring(triggerDistance),
+                tostring(closeEnough),
+                tostring(patrol.pursuit.speed),
+                tostring(patrol.pursuit.targetStoppedSince)
+            ))
+        end
+    end
+
+    QBCore.Functions.Notify("Pursuit debug printed to F8.", "primary")
 end, false)
 
 RegisterCommand("police_clearpatrols_client", function()

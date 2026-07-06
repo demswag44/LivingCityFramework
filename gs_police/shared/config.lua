@@ -196,7 +196,7 @@ Config.Pursuit.drivingStyle = 786603
 Config.Pursuit.useSiren = true
 Config.Pursuit.keepLightsOn = true
 
-Config.Pursuit.targetStoppedSpeedMps = 1.5
+Config.Pursuit.targetStoppedSpeedMps = 0.8
 Config.Pursuit.targetStoppedSeconds = 6
 Config.Pursuit.felonyStopDistance = 18.0
 
@@ -242,6 +242,74 @@ Config.EmergencyDriving.overtakeForwardDistance = 35.0
 Config.EmergencyDriving.messages = {
     repath = "Emergency unit repathing around traffic.",
     stuck = "Emergency unit appears blocked."
+}
+
+Config.PursuitTuning = Config.PursuitTuning or {}
+
+Config.PursuitTuning.enabled = true
+Config.PursuitTuning.debug = true
+
+Config.PursuitTuning.routeUpdateIntervalMs = 1500
+
+Config.PursuitTuning.speedByDistance = {
+    far = {
+        distance = 160.0,
+        speed = 34.0
+    },
+    medium = {
+        distance = 75.0,
+        speed = 28.0
+    },
+    close = {
+        distance = 35.0,
+        speed = 20.0
+    },
+    stopApproach = {
+        distance = 18.0,
+        speed = 10.0
+    }
+}
+
+Config.PursuitTuning.drivingStyle = 1074528293
+Config.PursuitTuning.closeDrivingStyle = 786603
+
+Config.PursuitTuning.maxCrashSpeedNearTarget = 18.0
+Config.PursuitTuning.followDistance = 22.0
+
+Config.PursuitTuning.arrival = {
+    enabled = true,
+    parkBehindDistance = 13.0,
+    parkSideOffset = -3.5,
+    parkAngleOffset = 8.0,
+    arrivalDistance = 18.0,
+    finalStopDistance = 12.0,
+    useTempBrakeMs = 2500,
+    keepLightsOn = true,
+    muteSiren = true
+}
+
+Config.PursuitTuning.felonyStop = Config.PursuitTuning.felonyStop or {}
+
+Config.PursuitTuning.felonyStop.requireCloseDistance = true
+Config.PursuitTuning.felonyStop.triggerDistance = 35.0
+Config.PursuitTuning.felonyStop.finalParkingDistance = 18.0
+Config.PursuitTuning.felonyStop.requireRecentTargetUpdate = true
+Config.PursuitTuning.felonyStop.maxTargetUpdateAgeSeconds = 8
+
+Config.PursuitTuning.stuck = {
+    enabled = true,
+    checkIntervalMs = 2500,
+    minSpeed = 1.0,
+    stuckAfterSeconds = 5,
+    repathSideOffset = 8.0,
+    repathForwardDistance = 35.0,
+    maxRepathAttempts = 5
+}
+
+Config.PursuitTuning.messages = {
+    pursuitTuned = "Pursuit route updated.",
+    parking = "Patrol positioning for felony stop.",
+    stuckRepath = "Pursuit unit repathing."
 }
 
 Config.DispatchEscalation = {
