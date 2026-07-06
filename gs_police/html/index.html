@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Police MDT</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main id="app" class="mdt hidden">
+        <section class="shell">
+            <aside class="feed">
+                <header class="topbar">
+                    <div>
+                        <p class="kicker">Living City</p>
+                        <h1>Police MDT</h1>
+                    </div>
+                    <button id="closeBtn" class="icon-btn" title="Close">X</button>
+                </header>
+
+                <div class="filters">
+                    <label>
+                        Status
+                        <select id="statusFilter">
+                            <option value="all">All</option>
+                            <option value="open">Open</option>
+                            <option value="assigned">Assigned</option>
+                            <option value="responding">Responding</option>
+                            <option value="closed">Closed</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        Threat
+                        <select id="threatFilter">
+                            <option value="all">All</option>
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="deadly">Deadly</option>
+                        </select>
+                    </label>
+
+                    <button id="refreshBtn" class="refresh-btn">Refresh</button>
+                </div>
+
+                <div id="incidentList" class="incident-list"></div>
+            </aside>
+
+            <section class="detail">
+                <div id="emptyState" class="empty-state">
+                    <h2>No Incident Selected</h2>
+                    <p>Select a record from the feed.</p>
+                </div>
+
+                <div id="detailContent" class="detail-content hidden">
+                    <header class="detail-header">
+                        <div>
+                            <p id="detailSource" class="kicker">Source</p>
+                            <h2 id="detailTitle">Incident</h2>
+                            <p id="detailMessage" class="detail-message"></p>
+                        </div>
+                        <div class="badges">
+                            <span id="threatBadge" class="badge">Threat</span>
+                            <span id="forceBadge" class="badge force">Force</span>
+                        </div>
+                    </header>
+
+                    <div class="summary-grid">
+                        <div><span>ID</span><strong id="detailId">-</strong></div>
+                        <div><span>Status</span><strong id="detailStatus">-</strong></div>
+                        <div><span>Type</span><strong id="detailType">-</strong></div>
+                        <div><span>Created</span><strong id="detailCreated">-</strong></div>
+                        <div><span>Response</span><strong id="detailResponse">-</strong></div>
+                        <div><span>Units</span><strong id="detailUnits">-</strong></div>
+                        <div><span>Location</span><strong id="detailLocation">-</strong></div>
+                        <div><span>Assigned</span><strong id="detailAssigned">-</strong></div>
+                    </div>
+
+                    <div class="split">
+                        <section class="panel">
+                            <h3>Metadata</h3>
+                            <div id="metadataList" class="kv-list"></div>
+                        </section>
+
+                        <section class="panel">
+                            <h3>Notes</h3>
+                            <div id="notesList" class="notes"></div>
+                        </section>
+                    </div>
+
+                    <footer class="actions">
+                        <input id="unitInput" type="text" maxlength="32" placeholder="Unit-12">
+                        <button id="assignBtn">Assign</button>
+                        <input id="noteInput" type="text" maxlength="160" placeholder="Add note">
+                        <button id="noteBtn">Add Note</button>
+                        <button id="closeIncidentBtn" class="danger">Close</button>
+                    </footer>
+                </div>
+            </section>
+        </section>
+    </main>
+    <script src="app.js"></script>
+</body>
+</html>

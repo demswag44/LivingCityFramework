@@ -1,0 +1,248 @@
+const app = document.getElementById('app');
+const incidentList = document.getElementById('incidentList');
+const emptyState = document.getElementById('emptyState');
+const detailContent = document.getElementById('detailContent');
+const statusFilter = document.getElementById('statusFilter');
+const threatFilter = document.getElementById('threatFilter');
+
+let records = [];
+let selectedId = null;
+
+function nui(eventName, data = {}) {
+    return fetch(`https://${GetParentResourceName()}/${eventName}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+        body: JSON.stringify(data),
+    }).then((response) => response.json());
+}
+
+function formatTime(timestamp) {
+    if (!timestamp) return 'Unknown';
+    const date = new Date(timestamp * 1000);
+    return date.toLocaleString();
+}
+
+function formatCoords(coords) {
+    if (!coords) return 'Unknown';
+    return `${Number(coords.x || 0).toFixed(2)}, ${Number(coords.y || 0).toFixed(2)}, ${Number(coords.z || 0).toFixed(2)}`;
+}
+
+function titleCase(value) {
+    return String(value || 'unknown')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getThreat(record) {
+    return record && record.assessment ? record.assessment.finalThreat || 'unknown' : 'unknown';
+}
+
+function getSelectedRecord() {
+    return records.find((record) => Number(record.id) === Number(selectedId)) || null;
+}
+
+function filteredRecords() {
+    const status = statusFilter.value;
+    const threat = threatFilter.value;
+
+    return records.filter((record) => {
+        const statusOk = status === 'all' || record.status === status;
+        const threatOk = threat === 'all' || getThreat(record) === threat;
+        return statusOk && threatOk;
+    });
+}
+
+function renderList() {
+    const filtered = filteredRecords();
+    incidentList.innerHTML = '';
+
+    if (!filtered.length) {
+        const empty = document.createElement('div');
+        empty.className = 'row-meta';
+        empty.textContent = 'No incidents match the current filters.';
+        incidentList.appendChild(empty);
+        return;
+    }
+
+    filtered.forEach((record) => {
+        const row = document.createElement('button');
+        row.className = `incident-row${Number(record.id) === Number(selectedId) ? ' active' : ''}`;
+        row.type = 'button';
+
+        const threat = getThreat(record);
+        row.innerHTML = `
+            <div class="row-title">
+                <span>#${record.id} ${titleCase(record.incidentType)}</span>
+                <span class="badge ${threat}">${threat}</span>
+            </div>
+            <div class="row-meta">${titleCase(record.status)} | ${record.sourceResource || 'unknown'}</div>
+            <div class="row-meta">${formatTime(record.createdAt)}</div>
+            <div class="row-meta">${record.title || 'Police Incident'}</div>
+        `;
+
+        row.addEventListener('click', () => {
+            selectedId = record.id;
+            render();
+        });
+
+        incidentList.appendChild(row);
+    });
+}
+
+function renderKeyValues(container, data) {
+    container.innerHTML = '';
+    const entries = Object.entries(data || {});
+
+    if (!entries.length) {
+        const empty = document.createElement('div');
+        empty.textContent = 'None';
+        container.appendChild(empty);
+        return;
+    }
+
+    entries.forEach(([key, value]) => {
+        const row = document.createElement('div');
+        const displayValue = typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value);
+        row.textContent = `${key}: ${displayValue}`;
+        container.appendChild(row);
+    });
+}
+
+function renderNotes(container, notes) {
+    container.innerHTML = '';
+
+    if (!notes || !notes.length) {
+        const empty = document.createElement('div');
+        empty.textContent = 'No notes recorded.';
+        container.appendChild(empty);
+        return;
+    }
+
+    notes.forEach((note) => {
+        const row = document.createElement('div');
+        row.textContent = `[${formatTime(note.time)}] ${note.author || 'unknown'}: ${note.text || ''}`;
+        container.appendChild(row);
+    });
+}
+
+function renderDetail() {
+    const record = getSelectedRecord();
+
+    if (!record) {
+        emptyState.classList.remove('hidden');
+        detailContent.classList.add('hidden');
+        return;
+    }
+
+    emptyState.classList.add('hidden');
+    detailContent.classList.remove('hidden');
+
+    const assessment = record.assessment || {};
+    const threat = assessment.finalThreat || 'unknown';
+
+    document.getElementById('detailSource').textContent = record.sourceResource || 'unknown';
+    document.getElementById('detailTitle').textContent = record.title || 'Police Incident';
+    document.getElementById('detailMessage').textContent = record.message || 'Incident reported.';
+    document.getElementById('detailId').textContent = `#${record.id}`;
+    document.getElementById('detailStatus').textContent = titleCase(record.status);
+    document.getElementById('detailType').textContent = titleCase(record.incidentType);
+    document.getElementById('detailCreated').textContent = formatTime(record.createdAt);
+    document.getElementById('detailResponse').textContent = titleCase(assessment.response);
+    document.getElementById('detailUnits').textContent = assessment.unitsRecommended || 1;
+    document.getElementById('detailLocation').textContent = record.locationText !== 'Unknown' ? record.locationText : formatCoords(record.coords);
+    document.getElementById('detailAssigned').textContent = record.assignedUnit || 'Unassigned';
+
+    const threatBadge = document.getElementById('threatBadge');
+    threatBadge.className = `badge ${threat}`;
+    threatBadge.textContent = threat;
+
+    const forceBadge = document.getElementById('forceBadge');
+    forceBadge.textContent = titleCase(assessment.forcePolicy);
+
+    document.getElementById('unitInput').value = record.assignedUnit || '';
+    renderKeyValues(document.getElementById('metadataList'), record.metadata || {});
+    renderNotes(document.getElementById('notesList'), record.notes || []);
+}
+
+function render() {
+    renderList();
+    renderDetail();
+}
+
+function setData(data) {
+    records = Array.isArray(data.records) ? data.records : [];
+
+    if (!selectedId && records.length) {
+        selectedId = records[0].id;
+    }
+
+    if (selectedId && !getSelectedRecord()) {
+        selectedId = records.length ? records[0].id : null;
+    }
+
+    render();
+}
+
+function doIncidentAction(action, extra = {}) {
+    const record = getSelectedRecord();
+    if (!record) return;
+
+    nui('incidentAction', { id: record.id, action, ...extra }).then((result) => {
+        if (result && result.records) {
+            setData(result);
+        }
+    });
+}
+
+document.getElementById('closeBtn').addEventListener('click', () => {
+    nui('close');
+});
+
+document.getElementById('refreshBtn').addEventListener('click', () => {
+    nui('refresh').then((result) => {
+        if (result && result.records) setData(result);
+    });
+});
+
+document.getElementById('assignBtn').addEventListener('click', () => {
+    const unit = document.getElementById('unitInput').value.trim();
+    if (!unit) return;
+    doIncidentAction('assign', { unit });
+});
+
+document.getElementById('noteBtn').addEventListener('click', () => {
+    const input = document.getElementById('noteInput');
+    const note = input.value.trim();
+    if (!note) return;
+    input.value = '';
+    doIncidentAction('note', { note });
+});
+
+document.getElementById('closeIncidentBtn').addEventListener('click', () => {
+    doIncidentAction('close');
+});
+
+statusFilter.addEventListener('change', render);
+threatFilter.addEventListener('change', render);
+
+window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        nui('close');
+    }
+});
+
+window.addEventListener('message', (event) => {
+    const data = event.data || {};
+
+    if (data.action === 'open') {
+        app.classList.remove('hidden');
+    }
+
+    if (data.action === 'close') {
+        app.classList.add('hidden');
+    }
+
+    if (data.action === 'setData') {
+        setData(data);
+    }
+});

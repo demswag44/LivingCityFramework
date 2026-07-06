@@ -116,6 +116,97 @@ local function FormatIncidentLine(record)
     )
 end
 
+local function SanitizeForNui(value, depth)
+    depth =
+        depth or 0
+
+    if depth > 6 then
+        return tostring(value)
+    end
+
+    local valueType =
+        type(value)
+
+    if valueType == "number"
+    or valueType == "string"
+    or valueType == "boolean"
+    or value == nil then
+        return value
+    end
+
+    if valueType == "vector3"
+    or (
+        valueType == "table"
+        and value.x
+        and value.y
+        and value.z
+    ) then
+        return {
+            x = tonumber(value.x) or 0.0,
+            y = tonumber(value.y) or 0.0,
+            z = tonumber(value.z) or 0.0
+        }
+    end
+
+    if valueType ~= "table" then
+        return tostring(value)
+    end
+
+    local sanitized = {}
+
+    for key, item in pairs(value) do
+        sanitized[tostring(key)] =
+            SanitizeForNui(item, depth + 1)
+    end
+
+    return sanitized
+end
+
+local function SerializeIncidentRecord(record)
+    if not record then
+        return nil
+    end
+
+    return {
+        id = record.id,
+        source = record.source,
+        sourceResource = record.sourceResource or "unknown",
+        incidentType = record.incidentType or "unknown",
+        title = record.title or "Police Incident",
+        message = record.message or "Incident reported.",
+        coords = SanitizeForNui(record.coords),
+        locationText = record.locationText or "Unknown",
+        createdAt = record.createdAt,
+        assessment = SanitizeForNui(record.assessment or {}),
+        orgContext = SanitizeForNui(record.orgContext or {}),
+        metadata = SanitizeForNui(record.metadata or {}),
+        status = record.status or "open",
+        assignedUnit = record.assignedUnit,
+        notes = SanitizeForNui(record.notes or {})
+    }
+end
+
+local function GetSerializedIncidentRecords()
+    local ids = {}
+    local records = {}
+
+    for id in pairs(incidentRecords) do
+        ids[#ids + 1] =
+            id
+    end
+
+    table.sort(ids, function(a, b)
+        return tonumber(a) > tonumber(b)
+    end)
+
+    for _, id in ipairs(ids) do
+        records[#records + 1] =
+            SerializeIncidentRecord(incidentRecords[id])
+    end
+
+    return records
+end
+
 local function TrimIncidentRecords()
     local maxRecords =
         (Config.IncidentRecords and Config.IncidentRecords.maxRecords) or 100
@@ -496,6 +587,98 @@ RegisterNetEvent("gs_police:server:assessIncident", function(alertData)
         AssessThreat(src, alertData)
 
     StoreIncident(src, alertData, assessment)
+end)
+
+QBCore.Functions.CreateCallback("gs_police:server:getMdtData", function(source, cb)
+    if not CanUsePoliceRecords(source) then
+        cb({
+            ok = false,
+            message = (
+                Config.IncidentRecords
+                and Config.IncidentRecords.messages
+                and Config.IncidentRecords.messages.denied
+            )
+            or "You are not authorized to access police incidents."
+        })
+        return
+    end
+
+    cb({
+        ok = true,
+        records = GetSerializedIncidentRecords()
+    })
+end)
+
+QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(source, cb, payload)
+    if not CanUsePoliceRecords(source) then
+        cb({
+            ok = false,
+            message = (
+                Config.IncidentRecords
+                and Config.IncidentRecords.messages
+                and Config.IncidentRecords.messages.denied
+            )
+            or "You are not authorized to access police incidents."
+        })
+        return
+    end
+
+    if type(payload) ~= "table" then
+        cb({ ok = false, message = "Invalid incident update." })
+        return
+    end
+
+    local record =
+        incidentRecords[tonumber(payload.id)]
+
+    if not record then
+        cb({ ok = false, message = "Incident not found." })
+        return
+    end
+
+    local action =
+        payload.action
+
+    if action == "assign" then
+        local unit =
+            tostring(payload.unit or "")
+
+        if unit == "" then
+            cb({ ok = false, message = "Assigned unit is required." })
+            return
+        end
+
+        record.status =
+            "assigned"
+        record.assignedUnit =
+            unit
+    elseif action == "note" then
+        local noteText =
+            tostring(payload.note or "")
+
+        if noteText == "" then
+            cb({ ok = false, message = "Note text is required." })
+            return
+        end
+
+        record.notes[#record.notes + 1] = {
+            author = source,
+            text = noteText,
+            time = os.time()
+        }
+    elseif action == "close" then
+        record.status =
+            "closed"
+    else
+        cb({ ok = false, message = "Unsupported incident action." })
+        return
+    end
+
+    cb({
+        ok = true,
+        record = SerializeIncidentRecord(record),
+        records = GetSerializedIncidentRecords()
+    })
 end)
 
 RegisterCommand("police_testincident", function(source, args)
