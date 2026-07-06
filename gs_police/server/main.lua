@@ -116,6 +116,206 @@ local function FormatIncidentLine(record)
     )
 end
 
+local function Now()
+    return os.time()
+end
+
+local function GetIncidentRecordById(incidentId)
+    return incidentRecords[tonumber(incidentId)]
+end
+
+local function GetOfficerName(src)
+    if src == 0 then
+        return "Server Console"
+    end
+
+    local Player =
+        QBCore.Functions.GetPlayer(src)
+
+    if not Player
+    or not Player.PlayerData then
+        return ("Officer %s"):format(src)
+    end
+
+    local charinfo =
+        Player.PlayerData.charinfo or {}
+    local firstName =
+        charinfo.firstname or ""
+    local lastName =
+        charinfo.lastname or ""
+    local fullName =
+        (firstName .. " " .. lastName):gsub("^%s+", ""):gsub("%s+$", "")
+
+    if fullName == "" then
+        return Player.PlayerData.name or ("Officer %s"):format(src)
+    end
+
+    return fullName
+end
+
+local function EnsureDispatchFields(record)
+    if not record then
+        return nil
+    end
+
+    record.dispatch =
+        record.dispatch or {}
+
+    if record.dispatch.assignedUnit == nil then
+        record.dispatch.assignedUnit =
+            record.assignedUnit or nil
+    end
+
+    if record.dispatch.aiRequested == nil then
+        record.dispatch.aiRequested =
+            false
+    end
+
+    if record.dispatch.assignedUnit then
+        record.assignedUnit =
+            record.dispatch.assignedUnit
+    end
+
+    return record.dispatch
+end
+
+local function AddIncidentNote(record, author, note)
+    if not record then
+        return
+    end
+
+    record.notes =
+        record.notes or {}
+
+    local timestamp =
+        Now()
+
+    record.notes[#record.notes + 1] = {
+        author = author or "System",
+        text = note or "",
+        time = timestamp,
+        note = note or "",
+        timestamp = timestamp
+    }
+end
+
+local function AssignIncidentToUnit(src, incidentId, unitName)
+    local cfg =
+        Config.Dispatch or {}
+
+    if cfg.enabled == false then
+        return false, "dispatchDisabled"
+    end
+
+    local record =
+        GetIncidentRecordById(incidentId)
+
+    if not record then
+        return false, "invalidIncident"
+    end
+
+    if not unitName or unitName == "" then
+        return false, "invalidUnit"
+    end
+
+    local dispatch =
+        EnsureDispatchFields(record)
+
+    dispatch.assignedUnit =
+        unitName
+    dispatch.assignedType =
+        "player"
+    dispatch.assignedBy =
+        src
+    dispatch.assignedByName =
+        GetOfficerName(src)
+    dispatch.assignedAt =
+        Now()
+
+    record.assignedUnit =
+        unitName
+    record.status =
+        "assigned"
+
+    AddIncidentNote(record, dispatch.assignedByName, ("Assigned incident to %s."):format(unitName))
+    TriggerEvent("gs_police:server:incidentUpdated", record)
+
+    return true, record
+end
+
+local function RequestAiUnitForIncident(src, incidentId, aiUnitType)
+    local cfg =
+        Config.Dispatch or {}
+
+    if cfg.enabled == false
+    or cfg.aiUnitsEnabled == false then
+        return false, "dispatchDisabled"
+    end
+
+    local record =
+        GetIncidentRecordById(incidentId)
+
+    if not record then
+        return false, "invalidIncident"
+    end
+
+    aiUnitType =
+        aiUnitType or cfg.defaultAiUnitType or "patrol"
+
+    local unitConfig =
+        cfg.aiUnitTypes and cfg.aiUnitTypes[aiUnitType]
+
+    if not unitConfig then
+        return false, "invalidUnit"
+    end
+
+    local dispatch =
+        EnsureDispatchFields(record)
+    local now =
+        Now()
+    local taskId =
+        ("AI-%s-%s"):format(incidentId, now)
+
+    dispatch.assignedUnit =
+        unitConfig.label or "AI Unit"
+    dispatch.assignedType =
+        "ai"
+    dispatch.assignedBy =
+        src
+    dispatch.assignedByName =
+        GetOfficerName(src)
+    dispatch.assignedAt =
+        now
+    dispatch.aiRequested =
+        true
+    dispatch.aiUnitType =
+        aiUnitType
+    dispatch.aiStatus =
+        "requested"
+    dispatch.aiTaskId =
+        taskId
+    dispatch.aiLastUpdate =
+        now
+
+    record.assignedUnit =
+        dispatch.assignedUnit
+    record.status =
+        unitConfig.responseStatus or "ai_assigned"
+
+    AddIncidentNote(record, dispatch.assignedByName, unitConfig.note or "AI unit requested.")
+
+    TriggerEvent("gs_police:server:aiUnitRequested", {
+        taskId = taskId,
+        incidentId = incidentId,
+        unitType = aiUnitType,
+        record = record,
+        requestedBy = src
+    })
+    TriggerEvent("gs_police:server:incidentUpdated", record)
+
+    return true, record
+end
+
 local function SanitizeForNui(value, depth)
     depth =
         depth or 0
@@ -167,6 +367,8 @@ local function SerializeIncidentRecord(record)
         return nil
     end
 
+    EnsureDispatchFields(record)
+
     return {
         id = record.id,
         source = record.source,
@@ -182,7 +384,8 @@ local function SerializeIncidentRecord(record)
         metadata = SanitizeForNui(record.metadata or {}),
         status = record.status or "open",
         assignedUnit = record.assignedUnit,
-        notes = SanitizeForNui(record.notes or {})
+        notes = SanitizeForNui(record.notes or {}),
+        dispatch = SanitizeForNui(record.dispatch or {})
     }
 end
 
@@ -229,9 +432,18 @@ local function TrimIncidentRecords()
 end
 
 local function IsValidIncidentStatus(status)
+    local dispatchStatuses =
+        Config.Dispatch and Config.Dispatch.statuses
+
+    if dispatchStatuses then
+        return dispatchStatuses[status] == true
+    end
+
     return status == "open"
         or status == "assigned"
         or status == "responding"
+        or status == "ai_assigned"
+        or status == "ai_responding"
         or status == "closed"
         or status == "cancelled"
 end
@@ -520,8 +732,22 @@ local function NormalizeIncidentRecord(incident)
         metadata = metadata,
         status = "open",
         assignedUnit = nil,
+        dispatch = {
+            assignedUnit = nil,
+            assignedType = nil,
+            assignedBy = nil,
+            assignedByName = nil,
+            assignedAt = nil,
+            aiRequested = false,
+            aiUnitType = nil,
+            aiStatus = nil,
+            aiTaskId = nil,
+            aiLastUpdate = nil
+        },
         notes = {}
     }
+
+    EnsureDispatchFields(record)
 
     return record
 end
@@ -628,8 +854,10 @@ QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(s
         return
     end
 
+    local incidentId =
+        tonumber(payload.id or payload.incidentId)
     local record =
-        incidentRecords[tonumber(payload.id)]
+        GetIncidentRecordById(incidentId)
 
     if not record then
         cb({ ok = false, message = "Incident not found." })
@@ -642,16 +870,39 @@ QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(s
     if action == "assign" then
         local unit =
             tostring(payload.unit or "")
+        local success, result =
+            AssignIncidentToUnit(source, incidentId, unit)
 
-        if unit == "" then
-            cb({ ok = false, message = "Assigned unit is required." })
+        if not success then
+            local message =
+                Config.Dispatch
+                and Config.Dispatch.messages
+                and Config.Dispatch.messages[result]
+                or "Unable to assign incident."
+
+            cb({ ok = false, success = false, message = message, error = result })
             return
         end
 
-        record.status =
-            "assigned"
-        record.assignedUnit =
-            unit
+        record =
+            result
+    elseif action == "assign_ai" then
+        local success, result =
+            RequestAiUnitForIncident(source, incidentId, payload.aiUnitType)
+
+        if not success then
+            local message =
+                Config.Dispatch
+                and Config.Dispatch.messages
+                and Config.Dispatch.messages[result]
+                or "Unable to request AI unit."
+
+            cb({ ok = false, success = false, message = message, error = result })
+            return
+        end
+
+        record =
+            result
     elseif action == "note" then
         local noteText =
             tostring(payload.note or "")
@@ -661,14 +912,12 @@ QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(s
             return
         end
 
-        record.notes[#record.notes + 1] = {
-            author = source,
-            text = noteText,
-            time = os.time()
-        }
+        AddIncidentNote(record, GetOfficerName(source), noteText)
+        TriggerEvent("gs_police:server:incidentUpdated", record)
     elseif action == "close" then
         record.status =
             "closed"
+        TriggerEvent("gs_police:server:incidentUpdated", record)
     else
         cb({ ok = false, message = "Unsupported incident action." })
         return
@@ -676,7 +925,9 @@ QBCore.Functions.CreateCallback("gs_police:server:updateMdtIncident", function(s
 
     cb({
         ok = true,
+        success = true,
         record = SerializeIncidentRecord(record),
+        incident = SerializeIncidentRecord(record),
         records = GetSerializedIncidentRecords()
     })
 end)
@@ -819,6 +1070,22 @@ local function PrintIncidentDetail(record)
         print(("Assigned Unit: %s"):format(record.assignedUnit))
     end
 
+    EnsureDispatchFields(record)
+    print(("Dispatch Type: %s"):format(record.dispatch.assignedType or "None"))
+
+    if record.dispatch.assignedByName then
+        print(("Assigned By: %s"):format(record.dispatch.assignedByName))
+    end
+
+    if record.dispatch.assignedAt then
+        print(("Assigned At: %s"):format(FormatTimestamp(record.dispatch.assignedAt)))
+    end
+
+    if record.dispatch.aiRequested then
+        print(("AI Status: %s"):format(record.dispatch.aiStatus or "unknown"))
+        print(("AI Task ID: %s"):format(record.dispatch.aiTaskId or "unknown"))
+    end
+
     if record.orgContext and record.orgContext.available then
         print(("Org Context: suspectOrg=%s territoryOwner=%s status=%s risk=%s"):format(
             tostring(record.orgContext.suspectOrgId or "unknown"),
@@ -854,9 +1121,9 @@ local function PrintIncidentDetail(record)
         for index, note in ipairs(record.notes) do
             print(("  %s. [%s] %s: %s"):format(
                 index,
-                FormatTimestamp(note.time),
+                FormatTimestamp(note.time or note.timestamp),
                 tostring(note.author or "unknown"),
-                note.text or ""
+                note.text or note.note or ""
             ))
         end
     end
@@ -940,6 +1207,7 @@ RegisterCommand("police_closeincident", function(source, args)
 
     record.status =
         "closed"
+    TriggerEvent("gs_police:server:incidentUpdated", record)
 
     Notify(source, "Incident closed.", "success")
 end, false)
@@ -952,27 +1220,74 @@ RegisterCommand("police_assignincident", function(source, args)
 
     local id =
         tonumber(args[1])
-    local record =
-        id and incidentRecords[id] or nil
     local unit =
         args[2]
-
-    if not record then
-        Notify(source, "Incident not found.", "error")
-        return
-    end
 
     if not unit or unit == "" then
         Notify(source, "Usage: /police_assignincident <id> <unit>", "error")
         return
     end
 
-    record.status =
-        "assigned"
-    record.assignedUnit =
-        unit
+    local success, result =
+        AssignIncidentToUnit(source, id, unit)
+
+    if not success then
+        local message =
+            Config.Dispatch
+            and Config.Dispatch.messages
+            and Config.Dispatch.messages[result]
+            or "Unable to assign incident."
+
+        Notify(source, message, "error")
+        return
+    end
 
     Notify(source, "Incident assigned.", "success")
+end, false)
+
+RegisterCommand("police_dispatchai", function(source, args)
+    if not CanUsePoliceRecords(source) then
+        DenyPoliceRecordAccess(source)
+        return
+    end
+
+    local incidentId =
+        tonumber(args[1])
+    local aiUnitType =
+        args[2] or (Config.Dispatch and Config.Dispatch.defaultAiUnitType) or "patrol"
+
+    if not incidentId then
+        if source == 0 then
+            print("[gs_police] Usage: police_dispatchai <incidentId> <patrol|backup|supervisor>")
+        else
+            Notify(source, "Usage: /police_dispatchai <incidentId> <patrol|backup|supervisor>", "error")
+        end
+        return
+    end
+
+    local success, result =
+        RequestAiUnitForIncident(source, incidentId, aiUnitType)
+
+    if not success then
+        local message =
+            Config.Dispatch
+            and Config.Dispatch.messages
+            and Config.Dispatch.messages[result]
+            or "Unable to request AI unit."
+
+        if source == 0 then
+            print(("[gs_police] %s"):format(message))
+        else
+            Notify(source, message, "error")
+        end
+        return
+    end
+
+    if source == 0 then
+        print("[gs_police] AI unit requested for incident.")
+    else
+        Notify(source, "AI unit requested for incident.", "success")
+    end
 end, false)
 
 RegisterCommand("police_noteincident", function(source, args)
@@ -1001,11 +1316,8 @@ RegisterCommand("police_noteincident", function(source, args)
         return
     end
 
-    record.notes[#record.notes + 1] = {
-        author = source,
-        text = noteText,
-        time = os.time()
-    }
+    AddIncidentNote(record, GetOfficerName(source), noteText)
+    TriggerEvent("gs_police:server:incidentUpdated", record)
 
     Notify(source, "Incident note added.", "success")
 end, false)
@@ -1039,6 +1351,14 @@ exports("UpdateIncidentStatus", function(id, status)
         status
 
     return true
+end)
+
+exports("RequestAiUnitForIncident", function(src, incidentId, aiUnitType)
+    return RequestAiUnitForIncident(src or 0, incidentId, aiUnitType)
+end)
+
+exports("AssignIncidentToUnit", function(src, incidentId, unitName)
+    return AssignIncidentToUnit(src or 0, incidentId, unitName)
 end)
 
 CreateThread(function()

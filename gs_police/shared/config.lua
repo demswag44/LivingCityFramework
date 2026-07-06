@@ -28,6 +28,48 @@ Config.IncidentRecords = {
 -- Optional ACE bypass:
 -- add_ace group.admin gs_police.incidents allow
 
+Config.Dispatch = {
+    enabled = true,
+    aiUnitsEnabled = true,
+    defaultAiUnitType = "patrol",
+
+    aiUnitTypes = {
+        patrol = {
+            label = "AI Patrol Unit",
+            responseStatus = "ai_assigned",
+            note = "AI patrol unit requested."
+        },
+        backup = {
+            label = "AI Backup Unit",
+            responseStatus = "ai_assigned",
+            note = "AI backup unit requested."
+        },
+        supervisor = {
+            label = "AI Supervisor Unit",
+            responseStatus = "ai_assigned",
+            note = "AI supervisor unit requested."
+        }
+    },
+
+    statuses = {
+        open = true,
+        assigned = true,
+        responding = true,
+        ai_assigned = true,
+        ai_responding = true,
+        closed = true,
+        cancelled = true
+    },
+
+    messages = {
+        aiAssigned = "AI unit requested for incident.",
+        playerAssigned = "Incident assigned.",
+        invalidIncident = "Invalid incident.",
+        invalidUnit = "Invalid unit.",
+        dispatchDisabled = "Dispatch system is disabled."
+    }
+}
+
 Config.ThreatLevels = {
     low = {
         label = "Low",

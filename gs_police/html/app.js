@@ -22,6 +22,10 @@ function formatTime(timestamp) {
     return date.toLocaleString();
 }
 
+function formatOptionalTime(timestamp) {
+    return timestamp ? formatTime(timestamp) : 'None';
+}
+
 function formatCoords(coords) {
     if (!coords) return 'Unknown';
     return `${Number(coords.x || 0).toFixed(2)}, ${Number(coords.y || 0).toFixed(2)}, ${Number(coords.z || 0).toFixed(2)}`;
@@ -120,7 +124,7 @@ function renderNotes(container, notes) {
 
     notes.forEach((note) => {
         const row = document.createElement('div');
-        row.textContent = `[${formatTime(note.time)}] ${note.author || 'unknown'}: ${note.text || ''}`;
+        row.textContent = `[${formatTime(note.time || note.timestamp)}] ${note.author || 'unknown'}: ${note.text || note.note || ''}`;
         container.appendChild(row);
     });
 }
@@ -138,6 +142,7 @@ function renderDetail() {
     detailContent.classList.remove('hidden');
 
     const assessment = record.assessment || {};
+    const dispatch = record.dispatch || {};
     const threat = assessment.finalThreat || 'unknown';
 
     document.getElementById('detailSource').textContent = record.sourceResource || 'unknown';
@@ -151,6 +156,11 @@ function renderDetail() {
     document.getElementById('detailUnits').textContent = assessment.unitsRecommended || 1;
     document.getElementById('detailLocation').textContent = record.locationText !== 'Unknown' ? record.locationText : formatCoords(record.coords);
     document.getElementById('detailAssigned').textContent = record.assignedUnit || 'Unassigned';
+    document.getElementById('detailDispatchType').textContent = titleCase(dispatch.assignedType || 'none');
+    document.getElementById('detailAssignedBy').textContent = dispatch.assignedByName || 'None';
+    document.getElementById('detailAssignedAt').textContent = formatOptionalTime(dispatch.assignedAt);
+    document.getElementById('detailAiStatus').textContent = dispatch.aiStatus ? titleCase(dispatch.aiStatus) : 'None';
+    document.getElementById('detailAiTask').textContent = dispatch.aiTaskId || 'None';
 
     const threatBadge = document.getElementById('threatBadge');
     threatBadge.className = `badge ${threat}`;
@@ -189,6 +199,9 @@ function doIncidentAction(action, extra = {}) {
 
     nui('incidentAction', { id: record.id, action, ...extra }).then((result) => {
         if (result && result.records) {
+            if (result.incident && result.incident.id) {
+                selectedId = result.incident.id;
+            }
             setData(result);
         }
     });
@@ -208,6 +221,12 @@ document.getElementById('assignBtn').addEventListener('click', () => {
     const unit = document.getElementById('unitInput').value.trim();
     if (!unit) return;
     doIncidentAction('assign', { unit });
+});
+
+document.querySelectorAll('[data-ai-unit]').forEach((button) => {
+    button.addEventListener('click', () => {
+        doIncidentAction('assign_ai', { aiUnitType: button.dataset.aiUnit });
+    });
 });
 
 document.getElementById('noteBtn').addEventListener('click', () => {
