@@ -228,6 +228,223 @@ local function GetFelonyStopParkingPoint(targetCoords, targetHeading)
     return vector4(x, y, z, policeHeading)
 end
 
+local function ResetSuspectInteraction(patrol)
+    if not patrol then
+        return
+    end
+
+    patrol.suspectInteraction =
+        nil
+    patrol.interactionStartedAt =
+        nil
+    patrol.interactionCompleted =
+        false
+end
+
+local function FindSuspectVehicleForPatrol(patrol)
+    if not patrol
+    or not patrol.pursuit then
+        return nil
+    end
+
+    local plate =
+        patrol.pursuit.plate
+    local normalizedPlate =
+        plate and tostring(plate):gsub("%s+", "") or nil
+    local lastKnown =
+        patrol.pursuit.lastKnownCoords
+    local bestVehicle =
+        nil
+    local bestDistance =
+        nil
+    local bestPlateMatch =
+        false
+    local vehicles =
+        GetGamePool("CVehicle")
+
+    for _, vehicle in ipairs(vehicles) do
+        if DoesEntityExist(vehicle)
+        and vehicle ~= patrol.vehicle then
+            local vehiclePlate =
+                tostring(GetVehicleNumberPlateText(vehicle) or ""):gsub("%s+", "")
+            local matchesPlate =
+                normalizedPlate
+                and normalizedPlate ~= ""
+                and vehiclePlate == normalizedPlate
+            local vehicleCoords =
+                GetEntityCoords(vehicle)
+            local distance =
+                999999.0
+
+            if lastKnown
+            and lastKnown.x then
+                distance =
+                    #(vehicleCoords - vector3(lastKnown.x, lastKnown.y, lastKnown.z))
+            elseif patrol.vehicle
+            and DoesEntityExist(patrol.vehicle) then
+                local patrolCoords =
+                    GetEntityCoords(patrol.vehicle)
+
+                distance =
+                    #(vehicleCoords - patrolCoords)
+            end
+
+            local interactionCfg =
+                Config.SuspectInteraction or {}
+
+            if matchesPlate
+            or distance <= (interactionCfg.vehicleCheckRadius or 30.0) then
+                if matchesPlate
+                and not bestPlateMatch then
+                    bestVehicle =
+                        vehicle
+                    bestDistance =
+                        distance
+                    bestPlateMatch =
+                        true
+                elseif matchesPlate == bestPlateMatch
+                and (
+                    not bestDistance
+                    or distance < bestDistance
+                ) then
+                    bestVehicle =
+                        vehicle
+                    bestDistance =
+                        distance
+                end
+            end
+        end
+    end
+
+    return bestVehicle, bestDistance
+end
+
+local function IsVehicleOccupied(vehicle)
+    if not vehicle
+    or not DoesEntityExist(vehicle) then
+        return false
+    end
+
+    local driver =
+        GetPedInVehicleSeat(vehicle, -1)
+
+    if driver
+    and driver ~= 0
+    and DoesEntityExist(driver) then
+        return true, driver
+    end
+
+    local maxPassengers =
+        GetVehicleMaxNumberOfPassengers(vehicle)
+
+    for seat = 0, maxPassengers - 1 do
+        local ped =
+            GetPedInVehicleSeat(vehicle, seat)
+
+        if ped
+        and ped ~= 0
+        and DoesEntityExist(ped) then
+            return true, ped
+        end
+    end
+
+    return false, nil
+end
+
+local function FaceEntity(ped, targetEntity)
+    if not ped
+    or not DoesEntityExist(ped) then
+        return
+    end
+
+    if not targetEntity
+    or not DoesEntityExist(targetEntity) then
+        return
+    end
+
+    TaskTurnPedToFaceEntity(ped, targetEntity, 2000)
+end
+
+local function StartOfficerCommandBehavior(patrol, suspectVehicle, occupied)
+    if not patrol
+    or not patrol.driver
+    or not DoesEntityExist(patrol.driver) then
+        return
+    end
+
+    ClearPedTasks(patrol.driver)
+
+    if suspectVehicle
+    and DoesEntityExist(suspectVehicle) then
+        FaceEntity(patrol.driver, suspectVehicle)
+    end
+
+    if occupied then
+        TaskStartScenarioInPlace(patrol.driver, "WORLD_HUMAN_COP_IDLES", 0, true)
+    else
+        TaskStartScenarioInPlace(patrol.driver, "WORLD_HUMAN_CLIPBOARD", 0, true)
+    end
+end
+
+local function BeginSuspectInteraction(patrolId, patrol)
+    if not Config.SuspectInteraction
+    or Config.SuspectInteraction.enabled == false then
+        return
+    end
+
+    if not patrol
+    or patrol.interactionCompleted then
+        return
+    end
+
+    local suspectVehicle =
+        FindSuspectVehicleForPatrol(patrol)
+
+    patrol.interactionStartedAt =
+        GetGameTimer()
+    patrol.interactionCompleted =
+        false
+
+    if not suspectVehicle
+    or not DoesEntityExist(suspectVehicle) then
+        patrol.suspectInteraction =
+            "vehicle_missing"
+
+        TriggerServerEvent("gs_police:server:suspectInteractionStatus", patrolId, "vehicle_missing", {
+            incidentId = patrol.assignedIncidentId
+        })
+
+        return
+    end
+
+    local occupied =
+        IsVehicleOccupied(suspectVehicle)
+
+    if occupied then
+        patrol.suspectInteraction =
+            "occupied_vehicle"
+
+        StartOfficerCommandBehavior(patrol, suspectVehicle, true)
+
+        TriggerServerEvent("gs_police:server:suspectInteractionStatus", patrolId, "occupied_vehicle", {
+            incidentId = patrol.assignedIncidentId
+        })
+
+        TriggerServerEvent("gs_police:server:suspectInteractionStatus", patrolId, "command_stage", {
+            incidentId = patrol.assignedIncidentId
+        })
+    else
+        patrol.suspectInteraction =
+            "empty_vehicle"
+
+        StartOfficerCommandBehavior(patrol, suspectVehicle, false)
+
+        TriggerServerEvent("gs_police:server:suspectInteractionStatus", patrolId, "empty_vehicle", {
+            incidentId = patrol.assignedIncidentId
+        })
+    end
+end
+
 local function EncourageTrafficMoveOver(policeVehicle)
     if not Config.EmergencyDriving
     or Config.EmergencyDriving.moveOverEnabled == false then
@@ -532,6 +749,7 @@ local function ReturnPatrolToRoute(patrolId)
         0
     patrol.felonyStopFinalized =
         false
+    ResetSuspectInteraction(patrol)
 
     if patrol.driver
     and DoesEntityExist(patrol.driver) then
@@ -607,6 +825,7 @@ local function ReturnPatrolToRoute(patrolId)
             0
         patrol.felonyStopFinalized =
             false
+        ResetSuspectInteraction(patrol)
         patrol.arrivedAt =
             nil
         patrol.returnAfter =
@@ -745,6 +964,9 @@ local function SpawnPatrolUnit(zoneKey)
         lastKnownSpeed = 0.0,
         repathAttempts = 0,
         felonyStopFinalized = false,
+        suspectInteraction = nil,
+        interactionStartedAt = nil,
+        interactionCompleted = false,
         spawnedAt = GetGameTimer(),
         lastWaypointAt = GetGameTimer()
     }
@@ -1144,6 +1366,8 @@ CreateThread(function()
                                 TriggerServerEvent("gs_police:server:patrolDispatchStatus", patrolId, "felony_stop", {
                                     incidentId = patrol.assignedIncidentId
                                 })
+
+                                BeginSuspectInteraction(patrolId, patrol)
                             else
                                 SendPatrolStatus(patrolId, patrol, "felony_stop")
                             end
@@ -1220,7 +1444,39 @@ CreateThread(function()
                             and Config.PatrolDispatch.scene
                             or {}
 
-                        if sceneCfg.autoReturnEnabled ~= false
+                        if patrol.suspectInteraction
+                        and patrol.interactionStartedAt
+                        and not patrol.interactionCompleted then
+                            local duration =
+                                Config.SuspectInteraction
+                                and Config.SuspectInteraction.commandDurationSeconds
+                                or 20
+
+                            if patrol.suspectInteraction == "empty_vehicle" then
+                                duration =
+                                    Config.SuspectInteraction
+                                    and Config.SuspectInteraction.emptyVehicleInvestigateSeconds
+                                    or 20
+                            end
+
+                            if GetGameTimer() - patrol.interactionStartedAt >= (duration * 1000) then
+                                patrol.interactionCompleted =
+                                    true
+                                patrol.suspectInteraction =
+                                    "holding_position"
+
+                                TriggerServerEvent("gs_police:server:suspectInteractionStatus", patrolId, "holding_position", {
+                                    incidentId = patrol.assignedIncidentId
+                                })
+
+                                if not Config.SuspectInteraction
+                                or Config.SuspectInteraction.autoReturnAfterInteraction ~= false then
+                                    ReturnPatrolToRoute(patrolId)
+                                end
+                            else
+                                SendPatrolStatus(patrolId, patrol, patrol.suspectInteraction)
+                            end
+                        elseif sceneCfg.autoReturnEnabled ~= false
                         and patrol.returnAfter
                         and GetGameTimer() >= patrol.returnAfter then
                             if ReturnPatrolToRoute(patrolId) then
@@ -1356,6 +1612,7 @@ RegisterNetEvent("gs_police:client:startPatrolPursuit", function(task)
         0
     patrol.felonyStopFinalized =
         false
+    ResetSuspectInteraction(patrol)
 
     if patrol.vehicle
     and DoesEntityExist(patrol.vehicle) then
@@ -1428,6 +1685,7 @@ RegisterNetEvent("gs_police:client:dispatchPatrolToIncident", function(task)
         0
     patrol.felonyStopFinalized =
         false
+    ResetSuspectInteraction(patrol)
 
     local emergencyResponse =
         ShouldUseEmergencyResponse(task)
@@ -1553,6 +1811,23 @@ RegisterCommand("police_pursuitdebug", function()
     end
 
     QBCore.Functions.Notify("Pursuit debug printed to F8.", "primary")
+end, false)
+
+RegisterCommand("police_interactiondebug", function()
+    for patrolId, patrol in pairs(ActivePatrols) do
+        if patrol.suspectInteraction then
+            print(("[gs_police:interaction_debug] patrol=%s mode=%s status=%s interaction=%s completed=%s incident=%s"):format(
+                patrolId,
+                tostring(patrol.mode),
+                tostring(patrol.status),
+                tostring(patrol.suspectInteraction),
+                tostring(patrol.interactionCompleted),
+                tostring(patrol.assignedIncidentId)
+            ))
+        end
+    end
+
+    QBCore.Functions.Notify("Interaction debug printed to F8.", "primary")
 end, false)
 
 RegisterCommand("police_clearpatrols_client", function()

@@ -252,6 +252,26 @@ function renderMovingTarget(container, record) {
     });
 }
 
+function renderSuspectInteraction(incident) {
+    const el = document.getElementById('suspect-interaction-section');
+
+    if (!el) return;
+
+    const interaction = incident.suspectInteraction;
+
+    if (!interaction) {
+        el.innerHTML = '<div class="muted-row">No suspect interaction recorded.</div>';
+        return;
+    }
+
+    el.innerHTML = `
+        <div class="detail-row"><span>Status</span><strong>${escapeHtml(titleCase(interaction.status || 'unknown'))}</strong></div>
+        <div class="detail-row"><span>Label</span><strong>${escapeHtml(interaction.label || 'Unknown')}</strong></div>
+        <div class="detail-row"><span>Patrol</span><strong>${escapeHtml(interaction.patrolId || '-')}</strong></div>
+        <div class="detail-row"><span>Updated</span><strong>${formatTime(interaction.updatedAt)}</strong></div>
+    `;
+}
+
 function renderDetail() {
     const record = getSelectedRecord();
 
@@ -314,6 +334,7 @@ function renderDetail() {
     document.getElementById('unitInput').value = record.assignedUnit || '';
     renderRecommendedUnits(document.getElementById('recommendedUnitsList'), recommendedUnits);
     renderMovingTarget(document.getElementById('movingTargetList'), record);
+    renderSuspectInteraction(record);
     renderKeyValues(document.getElementById('metadataList'), record.metadata || {});
     renderNotes(document.getElementById('notesList'), record.notes || []);
 }

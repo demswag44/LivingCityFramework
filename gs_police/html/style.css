@@ -426,6 +426,10 @@ input {
     overflow-wrap: anywhere;
 }
 
+.muted-row {
+    color: #8fa3a0;
+}
+
 .detail-row {
     display: flex;
     align-items: center;

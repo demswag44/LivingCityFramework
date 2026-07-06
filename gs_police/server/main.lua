@@ -840,7 +840,8 @@ local function SerializeIncidentRecord(record)
         notes = SanitizeForNui(record.notes or {}),
         dispatch = SanitizeForNui(record.dispatch or {}),
         dispatchPlan = dispatchPlan,
-        movingTarget = SanitizeForNui(record.movingTarget)
+        movingTarget = SanitizeForNui(record.movingTarget),
+        suspectInteraction = SanitizeForNui(record.suspectInteraction)
     }
 end
 
@@ -1454,6 +1455,60 @@ RegisterNetEvent("gs_police:server:patrolDispatchStatus", function(patrolId, sta
     TriggerEvent("gs_police:server:incidentUpdated", record)
 end)
 
+RegisterNetEvent("gs_police:server:suspectInteractionStatus", function(patrolId, status, data)
+    if not patrolId
+    or not status then
+        return
+    end
+
+    data =
+        data or {}
+
+    local incidentId =
+        tonumber(data.incidentId)
+
+    if not incidentId then
+        return
+    end
+
+    local record =
+        GetIncidentRecordById(incidentId)
+
+    if not record then
+        return
+    end
+
+    record.suspectInteraction =
+        record.suspectInteraction or {}
+    record.suspectInteraction.status =
+        status
+    record.suspectInteraction.patrolId =
+        patrolId
+    record.suspectInteraction.updatedAt =
+        os.time()
+
+    local cfg =
+        Config.SuspectInteraction or {}
+    local behavior =
+        cfg.behaviors and cfg.behaviors[status]
+
+    if behavior then
+        record.status =
+            behavior.status or status
+        record.suspectInteraction.label =
+            behavior.label or status
+        AddIncidentNote(record, "Officer", behavior.note or status)
+    else
+        record.status =
+            status
+        record.suspectInteraction.label =
+            status
+        AddIncidentNote(record, "Officer", status)
+    end
+
+    TriggerEvent("gs_police:server:incidentUpdated", record)
+end)
+
 local function GetPatrolDetectionSignals()
     local signals =
         {}
@@ -1617,6 +1672,11 @@ local function IsValidIncidentStatus(status)
         or status == "pursuit_lost"
         or status == "felony_stop"
         or status == "pursuit_cleared"
+        or status == "suspect_vehicle_occupied"
+        or status == "suspect_vehicle_empty"
+        or status == "suspect_vehicle_missing"
+        or status == "issuing_commands"
+        or status == "holding_position"
         or status == "closed"
         or status == "cancelled"
 end

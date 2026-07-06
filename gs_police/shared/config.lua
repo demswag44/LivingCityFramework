@@ -74,6 +74,11 @@ Config.Dispatch = {
         pursuit_lost = true,
         felony_stop = true,
         pursuit_cleared = true,
+        suspect_vehicle_occupied = true,
+        suspect_vehicle_empty = true,
+        suspect_vehicle_missing = true,
+        issuing_commands = true,
+        holding_position = true,
         closed = true,
         cancelled = true
     },
@@ -137,7 +142,12 @@ Config.PatrolDispatch.statuses = {
     pursuit_active = true,
     pursuit_lost = true,
     felony_stop = true,
-    pursuit_cleared = true
+    pursuit_cleared = true,
+    suspect_vehicle_occupied = true,
+    suspect_vehicle_empty = true,
+    suspect_vehicle_missing = true,
+    issuing_commands = true,
+    holding_position = true
 }
 
 Config.PatrolDispatch.messages = {
@@ -310,6 +320,59 @@ Config.PursuitTuning.messages = {
     pursuitTuned = "Pursuit route updated.",
     parking = "Patrol positioning for felony stop.",
     stuckRepath = "Pursuit unit repathing."
+}
+
+Config.SuspectInteraction = Config.SuspectInteraction or {}
+
+Config.SuspectInteraction.enabled = true
+Config.SuspectInteraction.debug = true
+
+Config.SuspectInteraction.vehicleCheckRadius = 30.0
+Config.SuspectInteraction.commandDistance = 12.0
+Config.SuspectInteraction.coverDistance = 9.0
+
+Config.SuspectInteraction.commandDurationSeconds = 20
+Config.SuspectInteraction.emptyVehicleInvestigateSeconds = 20
+Config.SuspectInteraction.autoReturnAfterInteraction = true
+
+Config.SuspectInteraction.behaviors = {
+    occupied_vehicle = {
+        label = "Vehicle Occupied",
+        status = "suspect_vehicle_occupied",
+        note = "Officer identified an occupied suspect vehicle and is issuing commands."
+    },
+
+    empty_vehicle = {
+        label = "Vehicle Empty",
+        status = "suspect_vehicle_empty",
+        note = "Officer found the suspect vehicle empty and is investigating."
+    },
+
+    vehicle_missing = {
+        label = "Vehicle Missing",
+        status = "suspect_vehicle_missing",
+        note = "Officer could not locate the suspect vehicle at the last known location."
+    },
+
+    command_stage = {
+        label = "Issuing Commands",
+        status = "issuing_commands",
+        note = "Officer is issuing commands to the suspect vehicle."
+    },
+
+    holding_position = {
+        label = "Holding Position",
+        status = "holding_position",
+        note = "Officer is holding position and awaiting further instructions."
+    }
+}
+
+Config.SuspectInteraction.messages = {
+    occupied = "Suspect vehicle occupied.",
+    empty = "Suspect vehicle empty.",
+    missing = "Suspect vehicle missing.",
+    commands = "Officer issuing commands.",
+    holding = "Officer holding position."
 }
 
 Config.DispatchEscalation = {
