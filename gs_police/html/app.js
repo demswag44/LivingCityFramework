@@ -217,6 +217,41 @@ function renderRecommendedUnits(container, units) {
     });
 }
 
+function renderMovingTarget(container, record) {
+    const target = record.movingTarget || {};
+    const speed = Number(target.speed || 0);
+    const heading = Number(target.heading || 0);
+    container.innerHTML = '';
+
+    if (!target.targetId && !target.plate && !target.lastKnownCoords) {
+        const empty = document.createElement('div');
+        empty.className = 'muted-row';
+        empty.textContent = 'No moving target attached.';
+        container.appendChild(empty);
+        return;
+    }
+
+    const rows = [
+        ['Target ID', target.targetId ? `#${target.targetId}` : 'Unknown'],
+        ['Plate', target.plate || 'Unknown'],
+        ['Model', target.model || 'Unknown'],
+        ['Status', target.lostAt ? 'Lost' : 'Tracking'],
+        ['Last Known', formatCoords(target.lastKnownCoords)],
+        ['Speed', Number.isFinite(speed) ? `${Math.round(speed)} mph` : 'Unknown'],
+        ['Heading', Number.isFinite(heading) ? String(Math.round(heading)) : 'Unknown'],
+        ['Updated', target.updatedAt ? formatTime(target.updatedAt) : 'Unknown'],
+        ['Lost', target.lostAt ? formatTime(target.lostAt) : 'No'],
+        ['Expired', target.expired ? 'Yes' : 'No']
+    ];
+
+    rows.forEach(([label, value]) => {
+        const row = document.createElement('div');
+        row.className = 'detail-row';
+        row.innerHTML = `<span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong>`;
+        container.appendChild(row);
+    });
+}
+
 function renderDetail() {
     const record = getSelectedRecord();
 
@@ -275,6 +310,7 @@ function renderDetail() {
 
     document.getElementById('unitInput').value = record.assignedUnit || '';
     renderRecommendedUnits(document.getElementById('recommendedUnitsList'), recommendedUnits);
+    renderMovingTarget(document.getElementById('movingTargetList'), record);
     renderKeyValues(document.getElementById('metadataList'), record.metadata || {});
     renderNotes(document.getElementById('notesList'), record.notes || []);
 }

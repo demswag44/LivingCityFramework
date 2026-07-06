@@ -426,6 +426,22 @@ input {
     overflow-wrap: anywhere;
 }
 
+.detail-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.detail-row span {
+    color: #9fb1ae;
+}
+
+.detail-row strong {
+    color: #eef6f4;
+    text-align: right;
+}
+
 .actions {
     display: grid;
     grid-template-columns: minmax(110px, 1fr) repeat(5, auto);

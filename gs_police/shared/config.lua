@@ -142,6 +142,37 @@ Config.PatrolDispatch.messages = {
     invalidPatrol = "Invalid patrol unit."
 }
 
+Config.MovingTargets = Config.MovingTargets or {}
+
+Config.MovingTargets.enabled = true
+Config.MovingTargets.debug = true
+
+Config.MovingTargets.updateIntervalMs = 2000
+Config.MovingTargets.staleAfterSeconds = 30
+Config.MovingTargets.expireAfterSeconds = 180
+Config.MovingTargets.maxTargets = 50
+
+Config.MovingTargets.trackableSignalTypes = {
+    stolen_vehicle_activity = true,
+    suspect_vehicle = true,
+    fleeing_vehicle = true
+}
+
+Config.MovingTargets.trackableIncidentTypes = {
+    stolen_vehicle_delivery = true,
+    stolen_vehicle_activity = true,
+    suspect_vehicle = true,
+    fleeing_vehicle = true
+}
+
+Config.MovingTargets.messages = {
+    targetAdded = "Moving target added.",
+    targetUpdated = "Moving target updated.",
+    targetLost = "Moving target lost. Using last known location.",
+    targetExpired = "Moving target expired.",
+    invalidTarget = "Invalid moving target."
+}
+
 Config.DispatchEscalation = {
     enabled = true,
     debug = true,
@@ -534,6 +565,30 @@ Config.IncidentTypes = {
         forcePolicy = "less_lethal_preferred",
         unitsRecommended = 2,
         description = "Possible stolen vehicle delivery."
+    },
+
+    stolen_vehicle_activity = {
+        baseThreat = "medium",
+        response = "investigate_with_caution",
+        forcePolicy = "less_lethal_preferred",
+        unitsRecommended = 2,
+        description = "Moving stolen vehicle activity."
+    },
+
+    suspect_vehicle = {
+        baseThreat = "medium",
+        response = "investigate_with_caution",
+        forcePolicy = "less_lethal_preferred",
+        unitsRecommended = 2,
+        description = "Suspicious moving vehicle."
+    },
+
+    fleeing_vehicle = {
+        baseThreat = "high",
+        response = "contain_and_backup",
+        forcePolicy = "less_lethal_if_safe",
+        unitsRecommended = 3,
+        description = "Fleeing suspect vehicle."
     },
 
     shots_fired = {

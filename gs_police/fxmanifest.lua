@@ -24,7 +24,8 @@ server_scripts {
 client_scripts {
     'client/main.lua',
     'client/ai_response.lua',
-    'client/ai_patrol.lua'
+    'client/ai_patrol.lua',
+    'client/moving_target.lua'
 }
 
 dependency 'qb-core'

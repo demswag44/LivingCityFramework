@@ -8,6 +8,9 @@ local ActivePatrolUnits = {}
 local PatrolDetectionSignals = {}
 local PatrolDetectionCooldowns = {}
 local NextDetectionSignalId = 1
+local MovingTargets = MovingTargets or {}
+local NextMovingTargetId = NextMovingTargetId or 1
+local GetMovingTargetLocationForIncident
 
 local function DebugPrint(message)
     if Config.Debug then
@@ -20,6 +23,14 @@ local function DebugPatrolDetection(...)
     and Config.PatrolDetection
     and Config.PatrolDetection.debug then
         print("[gs_police:patrol_detection]", ...)
+    end
+end
+
+local function DebugMovingTarget(...)
+    if Config
+    and Config.MovingTargets
+    and Config.MovingTargets.debug then
+        print("[gs_police:moving_target]", ...)
     end
 end
 
@@ -605,7 +616,9 @@ RegisterNetEvent("gs_police:server:aiUnitRequested", function(task)
     local record =
         task.record
     local coords =
-        NormalizeCoords(record.coords or record.location or record.position)
+        GetMovingTargetLocationForIncident
+        and GetMovingTargetLocationForIncident(record)
+        or NormalizeCoords(record.coords or record.location or record.position)
 
     if not coords then
         TriggerEvent("gs_police:server:updateAiUnitStatus", task.taskId, "failed", {
@@ -826,7 +839,8 @@ local function SerializeIncidentRecord(record)
         assignedUnit = record.assignedUnit,
         notes = SanitizeForNui(record.notes or {}),
         dispatch = SanitizeForNui(record.dispatch or {}),
-        dispatchPlan = dispatchPlan
+        dispatchPlan = dispatchPlan,
+        movingTarget = SanitizeForNui(record.movingTarget)
     }
 end
 
@@ -896,6 +910,215 @@ local function GetActivePatrolUnits()
     end)
 
     return units
+end
+
+local function BuildMovingTargetSummary(target)
+    if not target then
+        return nil
+    end
+
+    local lastKnownCoords =
+        NormalizeCoords(target.lastKnownCoords or target.coords)
+
+    return {
+        targetId = target.targetId,
+        targetType = target.targetType,
+        plate = target.plate,
+        netId = target.netId,
+        model = target.model,
+        vehicleClass = target.vehicleClass,
+        lastKnownCoords = lastKnownCoords and {
+            x = lastKnownCoords.x,
+            y = lastKnownCoords.y,
+            z = lastKnownCoords.z
+        } or nil,
+        heading = target.heading,
+        speed = target.speed,
+        updatedAt = target.updatedAt,
+        lostAt = target.lostAt,
+        expired = target.expired == true
+    }
+end
+
+local function AttachMovingTargetToRecord(record, target)
+    if not record
+    or not target then
+        return
+    end
+
+    record.movingTarget =
+        BuildMovingTargetSummary(target)
+end
+
+local function AddMovingTarget(data)
+    local cfg =
+        Config.MovingTargets or {}
+
+    if cfg.enabled == false then
+        return false, "disabled"
+    end
+
+    data =
+        data or {}
+
+    local coords =
+        NormalizeCoords(data.coords)
+
+    if not coords then
+        return false, "invalidTarget"
+    end
+
+    local count =
+        0
+
+    for _, target in pairs(MovingTargets) do
+        if target
+        and not target.expired then
+            count =
+                count + 1
+        end
+    end
+
+    if count >= (cfg.maxTargets or 50) then
+        return false, "maxTargets"
+    end
+
+    local targetId =
+        NextMovingTargetId
+
+    NextMovingTargetId =
+        NextMovingTargetId + 1
+
+    local target = {
+        targetId = targetId,
+        incidentId = tonumber(data.incidentId),
+        targetType = data.targetType or "vehicle",
+        signalType = data.signalType or data.incidentType or "stolen_vehicle_activity",
+        plate = data.plate,
+        netId = data.netId,
+        model = data.model,
+        vehicleClass = data.vehicleClass,
+        coords = coords,
+        lastKnownCoords = coords,
+        heading = tonumber(data.heading) or 0.0,
+        speed = tonumber(data.speed) or 0.0,
+        sourceResource = data.sourceResource or "unknown",
+        metadata = data.metadata or {},
+        createdAt = os.time(),
+        updatedAt = os.time(),
+        lostAt = nil,
+        expired = false
+    }
+
+    MovingTargets[targetId] =
+        target
+
+    DebugMovingTarget("added target", targetId, "plate", tostring(target.plate), "incident", tostring(target.incidentId))
+
+    return true, target
+end
+
+local function UpdateMovingTarget(targetId, data)
+    targetId =
+        tonumber(targetId)
+
+    if not targetId
+    or not MovingTargets[targetId] then
+        return false, "invalidTarget"
+    end
+
+    local target =
+        MovingTargets[targetId]
+
+    data =
+        data or {}
+
+    local coords =
+        NormalizeCoords(data.coords)
+
+    if coords then
+        target.coords =
+            coords
+        target.lastKnownCoords =
+            coords
+        target.updatedAt =
+            os.time()
+        target.lostAt =
+            nil
+    end
+
+    if data.heading then
+        target.heading =
+            tonumber(data.heading) or target.heading
+    end
+
+    if data.speed then
+        target.speed =
+            tonumber(data.speed) or target.speed
+    end
+
+    if data.netId then
+        target.netId =
+            data.netId
+    end
+
+    if data.plate then
+        target.plate =
+            data.plate
+    end
+
+    if data.model then
+        target.model =
+            data.model
+    end
+
+    if data.vehicleClass then
+        target.vehicleClass =
+            data.vehicleClass
+    end
+
+    DebugMovingTarget("updated target", targetId)
+
+    return true, target
+end
+
+local function GetMovingTargetByIncidentId(incidentId)
+    incidentId =
+        tonumber(incidentId)
+
+    if not incidentId then
+        return nil
+    end
+
+    for _, target in pairs(MovingTargets) do
+        if tonumber(target.incidentId) == incidentId
+        and not target.expired then
+            return target
+        end
+    end
+
+    return nil
+end
+
+GetMovingTargetLocationForIncident = function(record)
+    if not record then
+        return nil
+    end
+
+    local target =
+        GetMovingTargetByIncidentId(record.id)
+
+    if target
+    and target.lastKnownCoords then
+        return NormalizeCoords(target.lastKnownCoords), target
+    end
+
+    if record.movingTarget
+    and record.movingTarget.lastKnownCoords then
+        return NormalizeCoords(record.movingTarget.lastKnownCoords), record.movingTarget
+    end
+
+    return NormalizeCoords(record.coords or record.location or record.position), nil
 end
 
 local function IsPatrolAvailableForDispatch(patrol)
@@ -986,15 +1209,8 @@ local function DispatchNearestPatrolToIncident(src, incidentId)
         return false, "noIncident"
     end
 
-    local coords =
-        NormalizeCoords(
-            record.coords
-            or record.position
-            or (
-                record.alertData
-                and record.alertData.coords
-            )
-        )
+    local coords, movingTarget =
+        GetMovingTargetLocationForIncident(record)
 
     if not coords then
         return false, "noIncident"
@@ -1065,7 +1281,8 @@ local function DispatchNearestPatrolToIncident(src, incidentId)
         response = record.response or (
             record.assessment
             and record.assessment.response
-        )
+        ),
+        movingTarget = movingTarget and BuildMovingTargetSummary(movingTarget) or nil
     })
 
     TriggerEvent("gs_police:server:incidentUpdated", record)
@@ -1605,6 +1822,7 @@ local function NormalizeIncidentRecord(incident)
             appliedBy = nil,
             autoGenerated = false
         },
+        movingTarget = nil,
         notes = {}
     }
 
@@ -1660,6 +1878,224 @@ local function StoreIncident(src, alertData, assessment)
 
     return incident
 end
+
+RegisterNetEvent("gs_police:server:updateMovingTarget", function(targetId, data)
+    local success, target =
+        UpdateMovingTarget(targetId, data)
+
+    if not success
+    or not target
+    or not target.incidentId then
+        return
+    end
+
+    local record =
+        GetIncidentRecordById(target.incidentId)
+
+    if record then
+        AttachMovingTargetToRecord(record, target)
+        TriggerEvent("gs_police:server:incidentUpdated", record)
+    end
+end)
+
+RegisterNetEvent("gs_police:server:movingTargetLost", function(targetId)
+    targetId =
+        tonumber(targetId)
+
+    if not targetId
+    or not MovingTargets[targetId] then
+        return
+    end
+
+    local target =
+        MovingTargets[targetId]
+
+    if not target.lostAt then
+        target.lostAt =
+            os.time()
+        DebugMovingTarget("lost target", targetId)
+
+        if target.incidentId then
+            local record =
+                GetIncidentRecordById(target.incidentId)
+
+            if record then
+                AttachMovingTargetToRecord(record, target)
+                TriggerEvent("gs_police:server:incidentUpdated", record)
+            end
+        end
+    end
+end)
+
+RegisterNetEvent("gs_police:server:createMovingVehicleIncident", function(data)
+    print("[gs_police:moving_target] server createMovingVehicleIncident received")
+    print(("[gs_police:moving_target] plate=%s netId=%s incidentType=%s"):format(
+        tostring(data and data.plate),
+        tostring(data and data.netId),
+        tostring(data and data.incidentType)
+    ))
+
+    local src =
+        tonumber(source) or 0
+
+    data =
+        data or {}
+
+    local coords =
+        NormalizeCoords(data.coords)
+
+    if not coords then
+        print("[gs_police:moving_target] failed to create incident record: invalid coords")
+
+        if src > 0 then
+            TriggerClientEvent("QBCore:Notify", src, "Failed to create moving vehicle incident.", "error")
+        end
+
+        return
+    end
+
+    local incidentType =
+        data.incidentType or "stolen_vehicle_delivery"
+
+    local alertData = {
+        incidentType = incidentType,
+        type = incidentType,
+        title = data.title or "Moving Stolen Vehicle",
+        message = data.message or "Moving stolen or suspect vehicle reported.",
+        coords = coords,
+        source = src,
+        sourceResource = data.sourceResource or "moving_vehicle_test",
+        metadata = {
+            movingTarget = true,
+            plate = data.plate,
+            netId = data.netId,
+            signalType = data.signalType or "stolen_vehicle_activity"
+        },
+        escalation = data.escalation or {}
+    }
+
+    local assessment =
+        AssessThreat(src, alertData)
+    local incident =
+        StoreIncident(src, alertData, assessment)
+    local record =
+        incident and GetIncidentRecordById(incident.id)
+
+    if not record then
+        print("[gs_police:moving_target] failed to create incident record")
+
+        if src > 0 then
+            TriggerClientEvent("QBCore:Notify", src, "Failed to create moving vehicle incident.", "error")
+        end
+
+        return
+    end
+
+    local success, target =
+        AddMovingTarget({
+            incidentId = record.id,
+            targetType = "vehicle",
+            signalType = data.signalType or "stolen_vehicle_activity",
+            plate = data.plate,
+            netId = data.netId,
+            model = data.model,
+            vehicleClass = data.vehicleClass,
+            coords = coords,
+            heading = data.heading,
+            speed = data.speed,
+            sourceResource = data.sourceResource or "test_command",
+            metadata = {
+                createdBy = src
+            }
+        })
+
+    if not success
+    or not target then
+        print(("[gs_police:moving_target] moving target attach failed: %s"):format(tostring(target)))
+
+        if src > 0 then
+            TriggerClientEvent("QBCore:Notify", src, "Incident created, but moving target failed.", "error")
+        end
+
+        return
+    end
+
+    AttachMovingTargetToRecord(record, target)
+
+    if src > 0 then
+        TriggerClientEvent("gs_police:client:trackVehicleTarget", src, {
+            targetId = target.targetId,
+            incidentId = record.id,
+            netId = data.netId,
+            plate = data.plate
+        })
+    end
+
+    AddIncidentNote(record, "Dispatch", ("Moving vehicle target added: %s."):format(data.plate or "unknown plate"))
+    TriggerEvent("gs_police:server:incidentUpdated", record)
+
+    print(("[gs_police:moving_target] incident #%s moving target #%s created"):format(
+        tostring(record.id),
+        tostring(target.targetId)
+    ))
+
+    if src > 0 then
+        TriggerClientEvent("QBCore:Notify", src, "Moving vehicle incident created.", "success")
+    end
+end)
+
+CreateThread(function()
+    while true do
+        Wait(5000)
+
+        local cfg =
+            Config.MovingTargets or {}
+
+        if cfg.enabled ~= false then
+            local now =
+                os.time()
+
+            for targetId, target in pairs(MovingTargets) do
+                if target
+                and not target.expired then
+                    local changed =
+                        false
+
+                    if target.updatedAt
+                    and (now - target.updatedAt) >= (cfg.staleAfterSeconds or 30) then
+                        if not target.lostAt then
+                            target.lostAt =
+                                now
+                            changed =
+                                true
+                            DebugMovingTarget("stale target", targetId)
+                        end
+                    end
+
+                    if target.lostAt
+                    and (now - target.lostAt) >= (cfg.expireAfterSeconds or 180) then
+                        target.expired =
+                            true
+                        changed =
+                            true
+                        DebugMovingTarget("expired target", targetId)
+                    end
+
+                    if changed
+                    and target.incidentId then
+                        local record =
+                            GetIncidentRecordById(target.incidentId)
+
+                        if record then
+                            AttachMovingTargetToRecord(record, target)
+                            TriggerEvent("gs_police:server:incidentUpdated", record)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
 
 local function CreateIncidentFromPatrolDetection(signal, patrol)
     if not signal
@@ -2917,6 +3353,25 @@ end)
 
 exports("AddPatrolDetectionSignal", function(signalType, coords, metadata)
     return AddPatrolDetectionSignal(signalType, coords, metadata)
+end)
+
+exports("AddMovingTarget", function(data)
+    return AddMovingTarget(data)
+end)
+
+exports("UpdateMovingTarget", function(targetId, data)
+    return UpdateMovingTarget(targetId, data)
+end)
+
+exports("GetMovingTargetByIncidentId", function(incidentId)
+    return GetMovingTargetByIncidentId(incidentId)
+end)
+
+exports("GetMovingTargetLocationForIncident", function(incidentId)
+    local record =
+        GetIncidentRecordById(incidentId)
+
+    return GetMovingTargetLocationForIncident(record)
 end)
 
 CreateThread(function()
