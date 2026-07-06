@@ -129,6 +129,32 @@ function renderNotes(container, notes) {
     });
 }
 
+function renderRecommendedUnits(container, units) {
+    const normalizedUnits = Array.isArray(units)
+        ? units
+        : Object.keys(units || {})
+            .sort((a, b) => Number(a) - Number(b))
+            .map((key) => units[key])
+            .filter(Boolean);
+
+    container.innerHTML = '';
+
+    if (!normalizedUnits.length) {
+        const empty = document.createElement('div');
+        empty.className = 'muted-row';
+        empty.textContent = 'No recommended units.';
+        container.appendChild(empty);
+        return;
+    }
+
+    normalizedUnits.forEach((unit) => {
+        const row = document.createElement('div');
+        row.className = 'recommended-unit';
+        row.textContent = `${titleCase(unit.type || 'patrol')} x${Number(unit.count || 1)}`;
+        container.appendChild(row);
+    });
+}
+
 function renderDetail() {
     const record = getSelectedRecord();
 
@@ -143,6 +169,13 @@ function renderDetail() {
 
     const assessment = record.assessment || {};
     const dispatch = record.dispatch || {};
+    const dispatchPlan = record.dispatchPlan || {};
+    const recommendedUnits = Array.isArray(dispatchPlan.recommendedUnits)
+        ? dispatchPlan.recommendedUnits
+        : Object.keys(dispatchPlan.recommendedUnits || {})
+            .sort((a, b) => Number(a) - Number(b))
+            .map((key) => dispatchPlan.recommendedUnits[key])
+            .filter(Boolean);
     const threat = assessment.finalThreat || 'unknown';
 
     document.getElementById('detailSource').textContent = record.sourceResource || 'unknown';
@@ -162,6 +195,9 @@ function renderDetail() {
     document.getElementById('detailAiStatus').textContent = dispatch.aiStatus ? titleCase(dispatch.aiStatus) : 'None';
     document.getElementById('detailAiScene').textContent = dispatch.aiSceneBehavior ? titleCase(dispatch.aiSceneBehavior) : 'None';
     document.getElementById('detailAiTask').textContent = dispatch.aiTaskId || 'None';
+    document.getElementById('dispatchPlanLabel').textContent = dispatchPlan.label || 'None';
+    document.getElementById('dispatchPlanAppliedBy').textContent = dispatchPlan.appliedBy || 'None';
+    document.getElementById('dispatchPlanAppliedAt').textContent = formatOptionalTime(dispatchPlan.appliedAt);
 
     const threatBadge = document.getElementById('threatBadge');
     threatBadge.className = `badge ${threat}`;
@@ -171,6 +207,7 @@ function renderDetail() {
     forceBadge.textContent = titleCase(assessment.forcePolicy);
 
     document.getElementById('unitInput').value = record.assignedUnit || '';
+    renderRecommendedUnits(document.getElementById('recommendedUnitsList'), recommendedUnits);
     renderKeyValues(document.getElementById('metadataList'), record.metadata || {});
     renderNotes(document.getElementById('notesList'), record.notes || []);
 }
@@ -232,6 +269,14 @@ document.querySelectorAll('[data-ai-unit]').forEach((button) => {
 
 document.getElementById('clearAiBtn').addEventListener('click', () => {
     doIncidentAction('clear_ai');
+});
+
+document.getElementById('dispatchRecommendedBtn').addEventListener('click', () => {
+    doIncidentAction('dispatch_recommended');
+});
+
+document.getElementById('recalculatePlanBtn').addEventListener('click', () => {
+    doIncidentAction('recalculate_plan');
 });
 
 document.getElementById('noteBtn').addEventListener('click', () => {

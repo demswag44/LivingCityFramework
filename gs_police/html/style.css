@@ -316,6 +316,58 @@ input {
     gap: 14px;
 }
 
+.dispatch-plan-panel {
+    grid-column: 1 / -1;
+}
+
+.plan-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.plan-summary div {
+    min-height: 58px;
+    padding: 10px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.plan-summary span {
+    display: block;
+    margin-bottom: 6px;
+    color: #849795;
+    font-size: 12px;
+}
+
+.plan-summary strong {
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.panel-actions button {
+    min-height: 36px;
+    border: 0;
+    border-radius: 6px;
+    color: #06110f;
+    background: #74d7c5;
+    cursor: pointer;
+    font-weight: 760;
+}
+
+.panel-actions .secondary {
+    color: #eef6f4;
+    background: rgba(255, 255, 255, 0.12);
+}
+
 .panel {
     min-height: 190px;
     padding: 16px;
@@ -392,6 +444,7 @@ input {
     }
 
     .summary-grid,
+    .plan-summary,
     .split,
     .actions {
         grid-template-columns: 1fr;

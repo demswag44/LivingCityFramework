@@ -77,6 +77,77 @@ Config.Dispatch = {
     }
 }
 
+Config.DispatchEscalation = {
+    enabled = true,
+    debug = true,
+    defaultPlan = "patrol_only",
+
+    plans = {
+        patrol_only = {
+            label = "Patrol Only",
+            recommendedUnits = {
+                { type = "patrol", count = 1 }
+            },
+            recommendedStatus = "ai_assigned",
+            note = "Dispatch recommends one patrol unit."
+        },
+
+        patrol_backup = {
+            label = "Patrol + Backup",
+            recommendedUnits = {
+                { type = "patrol", count = 1 },
+                { type = "backup", count = 1 }
+            },
+            recommendedStatus = "ai_assigned",
+            note = "Dispatch recommends patrol and backup."
+        },
+
+        backup_supervisor = {
+            label = "Backup + Supervisor",
+            recommendedUnits = {
+                { type = "backup", count = 1 },
+                { type = "supervisor", count = 1 }
+            },
+            recommendedStatus = "ai_assigned",
+            note = "Dispatch recommends backup and supervisor response."
+        },
+
+        containment = {
+            label = "Containment Response",
+            recommendedUnits = {
+                { type = "patrol", count = 1 },
+                { type = "backup", count = 2 },
+                { type = "supervisor", count = 1 }
+            },
+            recommendedStatus = "ai_assigned",
+            note = "Dispatch recommends containment response."
+        }
+    },
+
+    threatPlans = {
+        low = "patrol_only",
+        medium = "patrol_backup",
+        high = "backup_supervisor",
+        deadly = "containment"
+    },
+
+    incidentOverrides = {
+        blackmarket_activity = "patrol_only",
+        shadowmarket_order = "patrol_only",
+        shadowmarket_pickup = "patrol_backup",
+        chopshop_activity = "patrol_backup",
+        stolen_vehicle_delivery = "patrol_backup",
+        shots_fired = "containment"
+    },
+
+    messages = {
+        planApplied = "Dispatch plan applied.",
+        invalidPlan = "Invalid dispatch plan.",
+        alreadyCleared = "Incident has already been cleared.",
+        noIncident = "Invalid incident."
+    }
+}
+
 Config.AIResponse = {
     enabled = true,
     debug = true,
