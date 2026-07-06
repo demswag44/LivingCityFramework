@@ -79,6 +79,11 @@ Config.Dispatch = {
         suspect_vehicle_missing = true,
         issuing_commands = true,
         holding_position = true,
+        suspect_compliant = true,
+        suspect_detained = true,
+        suspect_refused = true,
+        suspect_fled = true,
+        no_suspect_found = true,
         closed = true,
         cancelled = true
     },
@@ -147,7 +152,12 @@ Config.PatrolDispatch.statuses = {
     suspect_vehicle_empty = true,
     suspect_vehicle_missing = true,
     issuing_commands = true,
-    holding_position = true
+    holding_position = true,
+    suspect_compliant = true,
+    suspect_detained = true,
+    suspect_refused = true,
+    suspect_fled = true,
+    no_suspect_found = true
 }
 
 Config.PatrolDispatch.messages = {
@@ -373,6 +383,113 @@ Config.SuspectInteraction.messages = {
     missing = "Suspect vehicle missing.",
     commands = "Officer issuing commands.",
     holding = "Officer holding position."
+}
+
+Config.SuspectCompliance = Config.SuspectCompliance or {}
+
+Config.SuspectCompliance.enabled = true
+Config.SuspectCompliance.debug = true
+
+Config.SuspectCompliance.commandDelaySeconds = 4
+Config.SuspectCompliance.complianceDurationSeconds = 20
+Config.SuspectCompliance.detainedHoldSeconds = 30
+Config.SuspectCompliance.autoReturnAfterDetention = true
+
+Config.SuspectCompliance.outcomeChance = {
+    low = {
+        comply = 75,
+        refuse = 20,
+        flee = 5
+    },
+
+    medium = {
+        comply = 55,
+        refuse = 30,
+        flee = 15
+    },
+
+    high = {
+        comply = 35,
+        refuse = 35,
+        flee = 30
+    },
+
+    deadly = {
+        comply = 20,
+        refuse = 30,
+        flee = 50
+    }
+}
+
+Config.SuspectCompliance.behaviors = {
+    compliant = {
+        label = "Compliant",
+        status = "suspect_compliant",
+        note = "Suspect complied with officer commands."
+    },
+
+    detained = {
+        label = "Detained",
+        status = "suspect_detained",
+        note = "Suspect is detained at the scene."
+    },
+
+    refused = {
+        label = "Refused Commands",
+        status = "suspect_refused",
+        note = "Suspect refused officer commands and remains in vehicle."
+    },
+
+    fled = {
+        label = "Fled",
+        status = "suspect_fled",
+        note = "Suspect fled from the stop."
+    },
+
+    no_suspect = {
+        label = "No Suspect Found",
+        status = "no_suspect_found",
+        note = "No suspect was located at the scene."
+    }
+}
+
+Config.SuspectCompliance.messages = {
+    compliant = "Suspect complied.",
+    detained = "Suspect detained.",
+    refused = "Suspect refused commands.",
+    fled = "Suspect fled.",
+    noSuspect = "No suspect found."
+}
+
+Config.Telemetry = Config.Telemetry or {}
+
+Config.Telemetry.enabled = true
+Config.Telemetry.debug = true
+
+Config.Telemetry.includeCoords = true
+Config.Telemetry.includeIncidents = true
+Config.Telemetry.includePatrols = true
+Config.Telemetry.includeMovingTargets = true
+Config.Telemetry.includeDetectionSignals = true
+Config.Telemetry.includeAiResponseUnits = true
+
+Config.Telemetry.maxIncidents = 20
+Config.Telemetry.maxSignals = 20
+Config.Telemetry.maxPatrols = 20
+Config.Telemetry.maxTargets = 20
+
+Config.Telemetry.printPretty = true
+
+-- File writing may not work in all environments depending on resource permissions.
+-- Keep it optional and guarded.
+Config.Telemetry.writeFileEnabled = true
+Config.Telemetry.fileName = "runtime_state.json"
+
+Config.Telemetry.messages = {
+    disabled = "Telemetry is disabled.",
+    dumped = "Telemetry dumped.",
+    written = "Telemetry file written.",
+    failed = "Telemetry failed."
 }
 
 Config.DispatchEscalation = {

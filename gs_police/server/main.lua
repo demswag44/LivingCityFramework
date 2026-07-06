@@ -34,6 +34,79 @@ local function DebugMovingTarget(...)
     end
 end
 
+local function DebugTelemetry(...)
+    if Config
+    and Config.Telemetry
+    and Config.Telemetry.debug then
+        print("[gs_police:telemetry]", ...)
+    end
+end
+
+local function SerializeCoordsForTelemetry(coords)
+    if not coords then
+        return nil
+    end
+
+    if coords.x and coords.y and coords.z then
+        return {
+            x = tonumber(coords.x) or 0.0,
+            y = tonumber(coords.y) or 0.0,
+            z = tonumber(coords.z) or 0.0
+        }
+    end
+
+    if type(coords) == "table"
+    and coords[1]
+    and coords[2]
+    and coords[3] then
+        return {
+            x = tonumber(coords[1]) or 0.0,
+            y = tonumber(coords[2]) or 0.0,
+            z = tonumber(coords[3]) or 0.0
+        }
+    end
+
+    return nil
+end
+
+local function SafeTelemetryValue(value, depth)
+    depth =
+        depth or 0
+
+    if depth > 4 then
+        return tostring(value)
+    end
+
+    local valueType =
+        type(value)
+
+    if valueType == "nil"
+    or valueType == "number"
+    or valueType == "string"
+    or valueType == "boolean" then
+        return value
+    end
+
+    if valueType == "vector3"
+    or valueType == "vector4" then
+        return SerializeCoordsForTelemetry(value)
+    end
+
+    if valueType ~= "table" then
+        return tostring(value)
+    end
+
+    local output =
+        {}
+
+    for key, item in pairs(value) do
+        output[tostring(key)] =
+            SafeTelemetryValue(item, depth + 1)
+    end
+
+    return output
+end
+
 local function Notify(src, message, messageType)
     if src and src > 0 then
         TriggerClientEvent("QBCore:Notify", src, message, messageType or "primary")
@@ -841,7 +914,8 @@ local function SerializeIncidentRecord(record)
         dispatch = SanitizeForNui(record.dispatch or {}),
         dispatchPlan = dispatchPlan,
         movingTarget = SanitizeForNui(record.movingTarget),
-        suspectInteraction = SanitizeForNui(record.suspectInteraction)
+        suspectInteraction = SanitizeForNui(record.suspectInteraction),
+        suspectCompliance = SanitizeForNui(record.suspectCompliance)
     }
 end
 
@@ -1509,6 +1583,60 @@ RegisterNetEvent("gs_police:server:suspectInteractionStatus", function(patrolId,
     TriggerEvent("gs_police:server:incidentUpdated", record)
 end)
 
+RegisterNetEvent("gs_police:server:suspectComplianceStatus", function(patrolId, status, data)
+    if not patrolId
+    or not status then
+        return
+    end
+
+    data =
+        data or {}
+
+    local incidentId =
+        tonumber(data.incidentId)
+
+    if not incidentId then
+        return
+    end
+
+    local record =
+        GetIncidentRecordById(incidentId)
+
+    if not record then
+        return
+    end
+
+    record.suspectCompliance =
+        record.suspectCompliance or {}
+    record.suspectCompliance.status =
+        status
+    record.suspectCompliance.patrolId =
+        patrolId
+    record.suspectCompliance.updatedAt =
+        os.time()
+
+    local cfg =
+        Config.SuspectCompliance or {}
+    local behavior =
+        cfg.behaviors and cfg.behaviors[status]
+
+    if behavior then
+        record.status =
+            behavior.status or status
+        record.suspectCompliance.label =
+            behavior.label or status
+        AddIncidentNote(record, "Officer", behavior.note or status)
+    else
+        record.status =
+            status
+        record.suspectCompliance.label =
+            status
+        AddIncidentNote(record, "Officer", status)
+    end
+
+    TriggerEvent("gs_police:server:incidentUpdated", record)
+end)
+
 local function GetPatrolDetectionSignals()
     local signals =
         {}
@@ -1677,6 +1805,11 @@ local function IsValidIncidentStatus(status)
         or status == "suspect_vehicle_missing"
         or status == "issuing_commands"
         or status == "holding_position"
+        or status == "suspect_compliant"
+        or status == "suspect_detained"
+        or status == "suspect_refused"
+        or status == "suspect_fled"
+        or status == "no_suspect_found"
         or status == "closed"
         or status == "cancelled"
 end
@@ -2837,6 +2970,264 @@ local function PrintIncidentDetail(record)
     print("[gs_police] =========================")
 end
 
+local function BuildTelemetrySnapshot()
+    local cfg =
+        Config.Telemetry or {}
+
+    if cfg.enabled == false then
+        return nil, "disabled"
+    end
+
+    local snapshot = {
+        resource = "gs_police",
+        generatedAt = os.time(),
+        serverTime = os.date("%Y-%m-%d %H:%M:%S"),
+        counts = {},
+        incidents = {},
+        patrols = {},
+        aiResponseUnits = {},
+        movingTargets = {},
+        detectionSignals = {}
+    }
+
+    if cfg.includeIncidents ~= false then
+        local incidents =
+            {}
+
+        for _, record in pairs(incidentRecords or {}) do
+            incidents[#incidents + 1] = {
+                id = record.id,
+                type = record.type or record.incidentType,
+                status = record.status,
+                threatLevel = record.threatLevel
+                    or (
+                        record.assessment
+                        and record.assessment.threatLevel
+                    ),
+                response = record.response
+                    or (
+                        record.assessment
+                        and record.assessment.response
+                    ),
+                forcePolicy = record.forcePolicy
+                    or (
+                        record.assessment
+                        and record.assessment.forcePolicy
+                    ),
+                sourceResource = record.sourceResource,
+                coords = cfg.includeCoords ~= false
+                    and SerializeCoordsForTelemetry(record.coords or record.location or record.position)
+                    or nil,
+                assignedUnit = record.assignedUnit,
+                dispatch = SafeTelemetryValue(record.dispatch),
+                dispatchPlan = SafeTelemetryValue(record.dispatchPlan),
+                movingTarget = SafeTelemetryValue(record.movingTarget),
+                suspectInteraction = SafeTelemetryValue(record.suspectInteraction),
+                suspectCompliance = SafeTelemetryValue(record.suspectCompliance),
+                createdAt = record.createdAt,
+                updatedAt = record.updatedAt
+            }
+        end
+
+        table.sort(incidents, function(a, b)
+            return tonumber(a.id or 0) > tonumber(b.id or 0)
+        end)
+
+        local maxIncidents =
+            cfg.maxIncidents or 20
+
+        for i = 1, math.min(#incidents, maxIncidents) do
+            snapshot.incidents[#snapshot.incidents + 1] =
+                incidents[i]
+        end
+    end
+
+    if cfg.includePatrols ~= false then
+        local patrols =
+            {}
+
+        for patrolId, patrol in pairs(ActivePatrolUnits or {}) do
+            patrols[#patrols + 1] = {
+                patrolId = patrolId,
+                zoneKey = patrol.zoneKey,
+                zoneLabel = patrol.zoneLabel,
+                status = patrol.status,
+                mode = patrol.mode,
+                waypointIndex = patrol.waypointIndex,
+                assignedIncidentId = patrol.assignedIncidentId,
+                patrolStatus = patrol.patrolStatus,
+                coords = cfg.includeCoords ~= false
+                    and SerializeCoordsForTelemetry(patrol.coords)
+                    or nil,
+                updatedAt = patrol.updatedAt
+            }
+        end
+
+        table.sort(patrols, function(a, b)
+            return tostring(a.patrolId) < tostring(b.patrolId)
+        end)
+
+        local maxPatrols =
+            cfg.maxPatrols or 20
+
+        for i = 1, math.min(#patrols, maxPatrols) do
+            snapshot.patrols[#snapshot.patrols + 1] =
+                patrols[i]
+        end
+    end
+
+    if cfg.includeAiResponseUnits ~= false then
+        for _, record in pairs(incidentRecords or {}) do
+            local dispatch =
+                record.dispatch or {}
+
+            if dispatch.aiTaskId then
+                snapshot.aiResponseUnits[#snapshot.aiResponseUnits + 1] = {
+                    taskId = dispatch.aiTaskId,
+                    incidentId = record.id,
+                    unitType = dispatch.aiUnitType,
+                    status = dispatch.aiStatus,
+                    requestedBy = dispatch.assignedBy,
+                    requestedByName = dispatch.assignedByName,
+                    requestedAt = dispatch.assignedAt,
+                    updatedAt = dispatch.aiLastUpdate,
+                    coords = cfg.includeCoords ~= false
+                        and SerializeCoordsForTelemetry(record.coords or record.location or record.position)
+                        or nil
+                }
+            end
+        end
+
+        table.sort(snapshot.aiResponseUnits, function(a, b)
+            return tostring(a.taskId) < tostring(b.taskId)
+        end)
+    end
+
+    if cfg.includeMovingTargets ~= false then
+        local targets =
+            {}
+
+        for targetId, target in pairs(MovingTargets or {}) do
+            targets[#targets + 1] = {
+                targetId = targetId,
+                incidentId = target.incidentId,
+                targetType = target.targetType,
+                signalType = target.signalType,
+                plate = target.plate,
+                netId = target.netId,
+                coords = cfg.includeCoords ~= false
+                    and SerializeCoordsForTelemetry(target.coords)
+                    or nil,
+                lastKnownCoords = cfg.includeCoords ~= false
+                    and SerializeCoordsForTelemetry(target.lastKnownCoords)
+                    or nil,
+                heading = target.heading,
+                speed = target.speed,
+                sourceResource = target.sourceResource,
+                createdAt = target.createdAt,
+                updatedAt = target.updatedAt,
+                lostAt = target.lostAt,
+                expired = target.expired
+            }
+        end
+
+        table.sort(targets, function(a, b)
+            return tonumber(a.targetId or 0) > tonumber(b.targetId or 0)
+        end)
+
+        local maxTargets =
+            cfg.maxTargets or 20
+
+        for i = 1, math.min(#targets, maxTargets) do
+            snapshot.movingTargets[#snapshot.movingTargets + 1] =
+                targets[i]
+        end
+    end
+
+    if cfg.includeDetectionSignals ~= false then
+        local signals =
+            {}
+
+        for signalId, signal in pairs(PatrolDetectionSignals or {}) do
+            signals[#signals + 1] = {
+                id = signal.id or signalId,
+                signalType = signal.signalType,
+                label = signal.label,
+                sourceResource = signal.sourceResource,
+                coords = cfg.includeCoords ~= false
+                    and SerializeCoordsForTelemetry(signal.coords)
+                    or nil,
+                createdAt = signal.createdAt,
+                expiresAt = signal.expiresAt,
+                detected = signal.detected,
+                detectedByPatrolId = signal.detectedByPatrolId,
+                detectedAt = signal.detectedAt
+            }
+        end
+
+        table.sort(signals, function(a, b)
+            return tonumber(a.id or 0) > tonumber(b.id or 0)
+        end)
+
+        local maxSignals =
+            cfg.maxSignals or 20
+
+        for i = 1, math.min(#signals, maxSignals) do
+            snapshot.detectionSignals[#snapshot.detectionSignals + 1] =
+                signals[i]
+        end
+    end
+
+    snapshot.counts.incidents =
+        #(snapshot.incidents or {})
+    snapshot.counts.patrols =
+        #(snapshot.patrols or {})
+    snapshot.counts.aiResponseUnits =
+        #(snapshot.aiResponseUnits or {})
+    snapshot.counts.movingTargets =
+        #(snapshot.movingTargets or {})
+    snapshot.counts.detectionSignals =
+        #(snapshot.detectionSignals or {})
+
+    return snapshot
+end
+
+local function EncodeTelemetryJson(data)
+    if not json
+    or not json.encode then
+        return nil
+    end
+
+    local shouldIndent =
+        Config.Telemetry
+        and Config.Telemetry.printPretty == true
+
+    if shouldIndent then
+        local ok, encoded =
+            pcall(function()
+                return json.encode(data, {
+                    indent = true
+                })
+            end)
+
+        if ok
+        and encoded then
+            return encoded
+        end
+    end
+
+    local ok, encoded =
+        pcall(function()
+            return json.encode(data)
+        end)
+
+    if ok then
+        return encoded
+    end
+
+    return nil
+end
+
 RegisterCommand("police_incidents", function(source)
     if not CanUsePoliceRecords(source) then
         DenyPoliceRecordAccess(source)
@@ -2872,6 +3263,204 @@ RegisterCommand("police_incidents", function(source)
     end
 
     Notify(source, "Recent police incidents printed to console.", "primary")
+end, false)
+
+RegisterCommand("police_telemetry", function(source)
+    local eventSource =
+        tonumber(source) or 0
+
+    if not CanUsePoliceRecords(eventSource) then
+        DenyPoliceRecordAccess(eventSource)
+        return
+    end
+
+    local snapshot, err =
+        BuildTelemetrySnapshot()
+
+    if not snapshot then
+        local message =
+            (
+                Config.Telemetry
+                and Config.Telemetry.messages
+                and Config.Telemetry.messages[err]
+            )
+            or "Telemetry unavailable."
+
+        if eventSource > 0 then
+            Notify(eventSource, message, "error")
+        else
+            DebugTelemetry(message)
+        end
+
+        return
+    end
+
+    print("[gs_police:telemetry] ===== Runtime Snapshot =====")
+    print(("[gs_police:telemetry] incidents=%s patrols=%s aiUnits=%s targets=%s signals=%s"):format(
+        tostring(snapshot.counts.incidents),
+        tostring(snapshot.counts.patrols),
+        tostring(snapshot.counts.aiResponseUnits),
+        tostring(snapshot.counts.movingTargets),
+        tostring(snapshot.counts.detectionSignals)
+    ))
+
+    for _, patrol in ipairs(snapshot.patrols or {}) do
+        print(("[gs_police:telemetry] PATROL %s | zone=%s | mode=%s | status=%s | incident=%s"):format(
+            tostring(patrol.patrolId),
+            tostring(patrol.zoneKey),
+            tostring(patrol.mode),
+            tostring(patrol.status),
+            tostring(patrol.assignedIncidentId)
+        ))
+    end
+
+    for _, unit in ipairs(snapshot.aiResponseUnits or {}) do
+        print(("[gs_police:telemetry] AI UNIT %s | incident=%s | type=%s | status=%s"):format(
+            tostring(unit.taskId),
+            tostring(unit.incidentId),
+            tostring(unit.unitType),
+            tostring(unit.status)
+        ))
+    end
+
+    for _, incident in ipairs(snapshot.incidents or {}) do
+        print(("[gs_police:telemetry] INCIDENT #%s | %s | status=%s | threat=%s | unit=%s"):format(
+            tostring(incident.id),
+            tostring(incident.type),
+            tostring(incident.status),
+            tostring(incident.threatLevel),
+            tostring(incident.assignedUnit)
+        ))
+    end
+
+    if eventSource > 0 then
+        Notify(eventSource, "Telemetry printed to server console.", "primary")
+    end
+end, false)
+
+RegisterCommand("police_telemetryjson", function(source)
+    local eventSource =
+        tonumber(source) or 0
+
+    if not CanUsePoliceRecords(eventSource) then
+        DenyPoliceRecordAccess(eventSource)
+        return
+    end
+
+    local snapshot, err =
+        BuildTelemetrySnapshot()
+
+    if not snapshot then
+        local message =
+            (
+                Config.Telemetry
+                and Config.Telemetry.messages
+                and Config.Telemetry.messages[err]
+            )
+            or "Telemetry unavailable."
+
+        if eventSource > 0 then
+            Notify(eventSource, message, "error")
+        else
+            DebugTelemetry(message)
+        end
+
+        return
+    end
+
+    local encoded =
+        EncodeTelemetryJson(snapshot)
+
+    if not encoded then
+        if eventSource > 0 then
+            Notify(eventSource, "Telemetry JSON failed.", "error")
+        else
+            print("[gs_police:telemetry] JSON encode failed.")
+        end
+
+        return
+    end
+
+    print("[gs_police:telemetry_json] " .. encoded)
+
+    if eventSource > 0 then
+        Notify(eventSource, "Telemetry JSON printed to server console.", "primary")
+    end
+end, false)
+
+RegisterCommand("police_writetelemetry", function(source)
+    local eventSource =
+        tonumber(source) or 0
+
+    if not CanUsePoliceRecords(eventSource) then
+        DenyPoliceRecordAccess(eventSource)
+        return
+    end
+
+    if not Config.Telemetry
+    or Config.Telemetry.writeFileEnabled == false then
+        if eventSource > 0 then
+            Notify(eventSource, "Telemetry file writing disabled.", "error")
+        else
+            print("[gs_police:telemetry] File writing disabled.")
+        end
+
+        return
+    end
+
+    local snapshot, err =
+        BuildTelemetrySnapshot()
+
+    if not snapshot then
+        local message =
+            (
+                Config.Telemetry.messages
+                and Config.Telemetry.messages[err]
+            )
+            or "Telemetry unavailable."
+
+        if eventSource > 0 then
+            Notify(eventSource, message, "error")
+        end
+
+        print("[gs_police:telemetry] Unable to build snapshot: " .. tostring(err))
+        return
+    end
+
+    local encoded =
+        EncodeTelemetryJson(snapshot)
+
+    if not encoded then
+        print("[gs_police:telemetry] JSON encode failed.")
+
+        if eventSource > 0 then
+            Notify(eventSource, "Telemetry file write failed.", "error")
+        end
+
+        return
+    end
+
+    local fileName =
+        Config.Telemetry.fileName or "runtime_state.json"
+    local ok =
+        SaveResourceFile(GetCurrentResourceName(), fileName, encoded, -1)
+
+    if ok then
+        print(("[gs_police:telemetry] Wrote telemetry file: %s/%s"):format(
+            GetCurrentResourceName(),
+            fileName
+        ))
+
+        if eventSource > 0 then
+            Notify(eventSource, "Telemetry file written.", "success")
+        end
+    else
+        print("[gs_police:telemetry] SaveResourceFile failed.")
+
+        if eventSource > 0 then
+            Notify(eventSource, "Telemetry file write failed.", "error")
+        end
+    end
 end, false)
 
 RegisterCommand("police_incident", function(source, args)

@@ -272,6 +272,26 @@ function renderSuspectInteraction(incident) {
     `;
 }
 
+function renderSuspectCompliance(incident) {
+    const el = document.getElementById('suspect-compliance-section');
+
+    if (!el) return;
+
+    const compliance = incident.suspectCompliance;
+
+    if (!compliance) {
+        el.innerHTML = '<div class="muted-row">No compliance event recorded.</div>';
+        return;
+    }
+
+    el.innerHTML = `
+        <div class="detail-row"><span>Status</span><strong>${escapeHtml(titleCase(compliance.status || 'unknown'))}</strong></div>
+        <div class="detail-row"><span>Label</span><strong>${escapeHtml(compliance.label || 'Unknown')}</strong></div>
+        <div class="detail-row"><span>Patrol</span><strong>${escapeHtml(compliance.patrolId || '-')}</strong></div>
+        <div class="detail-row"><span>Updated</span><strong>${formatTime(compliance.updatedAt)}</strong></div>
+    `;
+}
+
 function renderDetail() {
     const record = getSelectedRecord();
 
@@ -335,6 +355,7 @@ function renderDetail() {
     renderRecommendedUnits(document.getElementById('recommendedUnitsList'), recommendedUnits);
     renderMovingTarget(document.getElementById('movingTargetList'), record);
     renderSuspectInteraction(record);
+    renderSuspectCompliance(record);
     renderKeyValues(document.getElementById('metadataList'), record.metadata || {});
     renderNotes(document.getElementById('notesList'), record.notes || []);
 }

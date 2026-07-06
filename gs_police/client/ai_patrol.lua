@@ -4,12 +4,21 @@ local QBCore =
 local ActivePatrols = {}
 local PendingTargetSnapshots = {}
 local LastMoveOverAt = 0
+local ForcedComplianceOutcome = nil
 
 local function DebugPrint(...)
     if Config
     and Config.AIPatrol
     and Config.AIPatrol.debug then
         print("[gs_police:ai_patrol]", ...)
+    end
+end
+
+local function DebugCompliance(...)
+    if Config
+    and Config.SuspectCompliance
+    and Config.SuspectCompliance.debug then
+        print("[gs_police:compliance]", ...)
     end
 end
 
@@ -239,6 +248,49 @@ local function ResetSuspectInteraction(patrol)
         nil
     patrol.interactionCompleted =
         false
+    patrol.compliance =
+        nil
+    patrol.complianceStartedAt =
+        nil
+    patrol.complianceCompleted =
+        false
+    patrol.detainedPed =
+        nil
+    patrol.suspectPed =
+        nil
+    patrol.suspectVehicle =
+        nil
+end
+
+local function RollSuspectCompliance(threatLevel)
+    local cfg =
+        Config.SuspectCompliance or {}
+    local chances =
+        cfg.outcomeChance or {}
+    local profile =
+        chances[threatLevel or "medium"]
+        or chances.medium
+        or {
+            comply = 55,
+            refuse = 30,
+            flee = 15
+        }
+    local roll =
+        math.random(1, 100)
+    local complyLimit =
+        tonumber(profile.comply) or 55
+    local refuseLimit =
+        complyLimit + (tonumber(profile.refuse) or 30)
+
+    if roll <= complyLimit then
+        return "comply", roll
+    end
+
+    if roll <= refuseLimit then
+        return "refuse", roll
+    end
+
+    return "flee", roll
 end
 
 local function FindSuspectVehicleForPatrol(patrol)
@@ -351,6 +403,38 @@ local function IsVehicleOccupied(vehicle)
     return false, nil
 end
 
+local function GetPrimarySuspectFromVehicle(vehicle)
+    if not vehicle
+    or not DoesEntityExist(vehicle) then
+        return nil
+    end
+
+    local driver =
+        GetPedInVehicleSeat(vehicle, -1)
+
+    if driver
+    and driver ~= 0
+    and DoesEntityExist(driver) then
+        return driver
+    end
+
+    local maxPassengers =
+        GetVehicleMaxNumberOfPassengers(vehicle)
+
+    for seat = 0, maxPassengers - 1 do
+        local ped =
+            GetPedInVehicleSeat(vehicle, seat)
+
+        if ped
+        and ped ~= 0
+        and DoesEntityExist(ped) then
+            return ped
+        end
+    end
+
+    return nil
+end
+
 local function FaceEntity(ped, targetEntity)
     if not ped
     or not DoesEntityExist(ped) then
@@ -384,6 +468,145 @@ local function StartOfficerCommandBehavior(patrol, suspectVehicle, occupied)
     else
         TaskStartScenarioInPlace(patrol.driver, "WORLD_HUMAN_CLIPBOARD", 0, true)
     end
+end
+
+local function StartSuspectComplyBehavior(patrol, suspectPed, suspectVehicle)
+    if not suspectPed
+    or not DoesEntityExist(suspectPed) then
+        return false
+    end
+
+    patrol.suspectPed =
+        suspectPed
+    patrol.suspectVehicle =
+        suspectVehicle
+
+    ClearPedTasks(suspectPed)
+
+    if suspectVehicle
+    and DoesEntityExist(suspectVehicle)
+    and IsPedInVehicle(suspectPed, suspectVehicle, false) then
+        TaskLeaveVehicle(suspectPed, suspectVehicle, 0)
+        Wait(2500)
+    end
+
+    if DoesEntityExist(suspectPed) then
+        ClearPedTasks(suspectPed)
+
+        local officer =
+            patrol.driver
+
+        if officer
+        and DoesEntityExist(officer) then
+            TaskTurnPedToFaceEntity(suspectPed, officer, 2000)
+        end
+
+        TaskHandsUp(
+            suspectPed,
+            ((Config.SuspectCompliance and Config.SuspectCompliance.complianceDurationSeconds) or 20) * 1000,
+            patrol.driver or 0,
+            -1,
+            true
+        )
+        SetBlockingOfNonTemporaryEvents(suspectPed, true)
+
+        patrol.detainedPed =
+            suspectPed
+        patrol.compliance =
+            "compliant"
+        patrol.complianceStartedAt =
+            GetGameTimer()
+        patrol.complianceCompleted =
+            false
+        patrol.interactionCompleted =
+            true
+
+        return true
+    end
+
+    return false
+end
+
+local function StartSuspectRefuseBehavior(patrol, suspectPed, suspectVehicle)
+    if not suspectPed
+    or not DoesEntityExist(suspectPed) then
+        return false
+    end
+
+    patrol.suspectPed =
+        suspectPed
+    patrol.suspectVehicle =
+        suspectVehicle
+    patrol.compliance =
+        "refused"
+    patrol.complianceStartedAt =
+        GetGameTimer()
+    patrol.complianceCompleted =
+        false
+    patrol.interactionCompleted =
+        true
+
+    ClearPedTasks(suspectPed)
+
+    if suspectVehicle
+    and DoesEntityExist(suspectVehicle) then
+        TaskVehicleTempAction(suspectPed, suspectVehicle, 1, 3000)
+    end
+
+    SetBlockingOfNonTemporaryEvents(suspectPed, true)
+
+    return true
+end
+
+local function StartSuspectFleeBehavior(patrol, suspectPed, suspectVehicle)
+    if not suspectPed
+    or not DoesEntityExist(suspectPed) then
+        return false
+    end
+
+    patrol.suspectPed =
+        suspectPed
+    patrol.suspectVehicle =
+        suspectVehicle
+    patrol.compliance =
+        "fled"
+    patrol.complianceStartedAt =
+        GetGameTimer()
+    patrol.complianceCompleted =
+        true
+    patrol.interactionCompleted =
+        true
+
+    ClearPedTasks(suspectPed)
+    SetBlockingOfNonTemporaryEvents(suspectPed, false)
+
+    if suspectVehicle
+    and DoesEntityExist(suspectVehicle) then
+        if not IsPedInVehicle(suspectPed, suspectVehicle, false) then
+            TaskEnterVehicle(suspectPed, suspectVehicle, 5000, -1, 2.0, 1, 0)
+            Wait(2500)
+        end
+
+        if IsPedInVehicle(suspectPed, suspectVehicle, false) then
+            local fleeCoords =
+                GetOffsetFromEntityInWorldCoords(suspectVehicle, 0.0, 200.0, 0.0)
+
+            TaskVehicleDriveToCoordLongrange(
+                suspectPed,
+                suspectVehicle,
+                fleeCoords.x,
+                fleeCoords.y,
+                fleeCoords.z,
+                28.0,
+                1074528293,
+                10.0
+            )
+        end
+    else
+        TaskSmartFleePed(suspectPed, patrol.driver or PlayerPedId(), 150.0, -1, false, false)
+    end
+
+    return true
 end
 
 local function BeginSuspectInteraction(patrolId, patrol)
@@ -420,6 +643,9 @@ local function BeginSuspectInteraction(patrolId, patrol)
     local occupied =
         IsVehicleOccupied(suspectVehicle)
 
+    patrol.suspectVehicle =
+        suspectVehicle
+
     if occupied then
         patrol.suspectInteraction =
             "occupied_vehicle"
@@ -433,6 +659,107 @@ local function BeginSuspectInteraction(patrolId, patrol)
         TriggerServerEvent("gs_police:server:suspectInteractionStatus", patrolId, "command_stage", {
             incidentId = patrol.assignedIncidentId
         })
+
+        CreateThread(function()
+            Wait(((Config.SuspectCompliance and Config.SuspectCompliance.commandDelaySeconds) or 4) * 1000)
+
+            if not Config.SuspectCompliance
+            or Config.SuspectCompliance.enabled == false then
+                return
+            end
+
+            if not patrol
+            or patrol.compliance then
+                return
+            end
+
+            local currentSuspectVehicle =
+                patrol.suspectVehicle
+
+            if not currentSuspectVehicle
+            or not DoesEntityExist(currentSuspectVehicle) then
+                currentSuspectVehicle =
+                    FindSuspectVehicleForPatrol(patrol)
+            end
+
+            if not currentSuspectVehicle
+            or not DoesEntityExist(currentSuspectVehicle) then
+                patrol.compliance =
+                    "no_suspect"
+                patrol.complianceCompleted =
+                    true
+                patrol.interactionCompleted =
+                    true
+
+                TriggerServerEvent("gs_police:server:suspectComplianceStatus", patrolId, "no_suspect", {
+                    incidentId = patrol.assignedIncidentId
+                })
+
+                return
+            end
+
+            local suspectPed =
+                GetPrimarySuspectFromVehicle(currentSuspectVehicle)
+
+            if not suspectPed
+            or not DoesEntityExist(suspectPed) then
+                patrol.compliance =
+                    "no_suspect"
+                patrol.complianceCompleted =
+                    true
+                patrol.interactionCompleted =
+                    true
+
+                TriggerServerEvent("gs_police:server:suspectComplianceStatus", patrolId, "no_suspect", {
+                    incidentId = patrol.assignedIncidentId
+                })
+
+                return
+            end
+
+            local threatLevel =
+                patrol.pursuit
+                and patrol.pursuit.threatLevel
+                or "medium"
+            local outcome =
+                nil
+            local roll =
+                nil
+
+            if ForcedComplianceOutcome then
+                outcome =
+                    ForcedComplianceOutcome
+                roll =
+                    0
+                ForcedComplianceOutcome =
+                    nil
+            else
+                outcome, roll =
+                    RollSuspectCompliance(threatLevel)
+            end
+
+            DebugCompliance("outcome", outcome, "roll", roll, "incident", patrol.assignedIncidentId)
+
+            if outcome == "comply" then
+                if StartSuspectComplyBehavior(patrol, suspectPed, currentSuspectVehicle) then
+                    TriggerServerEvent("gs_police:server:suspectComplianceStatus", patrolId, "compliant", {
+                        incidentId = patrol.assignedIncidentId
+                    })
+                end
+            elseif outcome == "refuse" then
+                if StartSuspectRefuseBehavior(patrol, suspectPed, currentSuspectVehicle) then
+                    TriggerServerEvent("gs_police:server:suspectComplianceStatus", patrolId, "refused", {
+                        incidentId = patrol.assignedIncidentId
+                    })
+                end
+            elseif outcome == "flee" then
+                if StartSuspectFleeBehavior(patrol, suspectPed, currentSuspectVehicle) then
+                    TriggerServerEvent("gs_police:server:suspectComplianceStatus", patrolId, "fled", {
+                        incidentId = patrol.assignedIncidentId
+                    })
+                end
+            end
+        end)
     else
         patrol.suspectInteraction =
             "empty_vehicle"
@@ -967,6 +1294,12 @@ local function SpawnPatrolUnit(zoneKey)
         suspectInteraction = nil,
         interactionStartedAt = nil,
         interactionCompleted = false,
+        compliance = nil,
+        complianceStartedAt = nil,
+        complianceCompleted = false,
+        detainedPed = nil,
+        suspectPed = nil,
+        suspectVehicle = nil,
         spawnedAt = GetGameTimer(),
         lastWaypointAt = GetGameTimer()
     }
@@ -1444,7 +1777,60 @@ CreateThread(function()
                             and Config.PatrolDispatch.scene
                             or {}
 
-                        if patrol.suspectInteraction
+                        if patrol.compliance == "compliant"
+                        and patrol.complianceStartedAt
+                        and not patrol.complianceCompleted then
+                            local duration =
+                                Config.SuspectCompliance
+                                and Config.SuspectCompliance.complianceDurationSeconds
+                                or 20
+
+                            if GetGameTimer() - patrol.complianceStartedAt >= (duration * 1000) then
+                                patrol.compliance =
+                                    "detained"
+                                patrol.complianceCompleted =
+                                    true
+
+                                if patrol.detainedPed
+                                and DoesEntityExist(patrol.detainedPed) then
+                                    ClearPedTasks(patrol.detainedPed)
+                                    TaskStartScenarioInPlace(patrol.detainedPed, "WORLD_HUMAN_STAND_IMPATIENT", 0, true)
+                                    SetBlockingOfNonTemporaryEvents(patrol.detainedPed, true)
+                                end
+
+                                TriggerServerEvent("gs_police:server:suspectComplianceStatus", patrolId, "detained", {
+                                    incidentId = patrol.assignedIncidentId
+                                })
+
+                                if not Config.SuspectCompliance
+                                or Config.SuspectCompliance.autoReturnAfterDetention ~= false then
+                                    CreateThread(function()
+                                        Wait(((Config.SuspectCompliance and Config.SuspectCompliance.detainedHoldSeconds) or 30) * 1000)
+                                        ReturnPatrolToRoute(patrolId)
+                                    end)
+                                end
+                            else
+                                SendPatrolStatus(patrolId, patrol, "suspect_compliant")
+                            end
+                        elseif patrol.compliance == "refused"
+                        and patrol.complianceStartedAt
+                        and not patrol.complianceCompleted then
+                            local duration =
+                                Config.SuspectCompliance
+                                and Config.SuspectCompliance.commandDelaySeconds
+                                or 4
+
+                            if GetGameTimer() - patrol.complianceStartedAt >= (duration * 1000) then
+                                patrol.complianceCompleted =
+                                    true
+
+                                TriggerServerEvent("gs_police:server:suspectComplianceStatus", patrolId, "refused", {
+                                    incidentId = patrol.assignedIncidentId
+                                })
+                            else
+                                SendPatrolStatus(patrolId, patrol, "suspect_refused")
+                            end
+                        elseif patrol.suspectInteraction
                         and patrol.interactionStartedAt
                         and not patrol.interactionCompleted then
                             local duration =
@@ -1598,7 +1984,8 @@ RegisterNetEvent("gs_police:client:startPatrolPursuit", function(task)
         startedAt = GetGameTimer(),
         targetStoppedSince = nil,
         felonyStopStarted = false,
-        felonyStopStaged = false
+        felonyStopStaged = false,
+        threatLevel = task.threatLevel or "medium"
     }
     patrol.lastEmergencyRepath =
         0
@@ -1828,6 +2215,103 @@ RegisterCommand("police_interactiondebug", function()
     end
 
     QBCore.Functions.Notify("Interaction debug printed to F8.", "primary")
+end, false)
+
+RegisterCommand("police_compliancedebug", function()
+    for patrolId, patrol in pairs(ActivePatrols) do
+        if patrol.compliance then
+            print(("[gs_police:compliance_debug] patrol=%s mode=%s status=%s compliance=%s completed=%s incident=%s suspect=%s"):format(
+                patrolId,
+                tostring(patrol.mode),
+                tostring(patrol.status),
+                tostring(patrol.compliance),
+                tostring(patrol.complianceCompleted),
+                tostring(patrol.assignedIncidentId),
+                tostring(patrol.suspectPed)
+            ))
+        end
+    end
+
+    QBCore.Functions.Notify("Compliance debug printed to F8.", "primary")
+end, false)
+
+RegisterCommand("police_clienttelemetry", function()
+    print("[gs_police:client_telemetry] ===== Client Patrol Snapshot =====")
+
+    local count =
+        0
+
+    for patrolId, patrol in pairs(ActivePatrols or {}) do
+        count =
+            count + 1
+
+        local speed =
+            0.0
+
+        if patrol.vehicle
+        and DoesEntityExist(patrol.vehicle) then
+            speed =
+                GetEntitySpeed(patrol.vehicle)
+        end
+
+        print(("[gs_police:client_telemetry] PATROL %s | zone=%s | mode=%s | status=%s | speed=%.2f | incident=%s | emergency=%s | stuckSince=%s"):format(
+            tostring(patrolId),
+            tostring(patrol.zoneKey),
+            tostring(patrol.mode),
+            tostring(patrol.status),
+            speed,
+            tostring(patrol.assignedIncidentId),
+            tostring(patrol.emergencyResponse),
+            tostring(patrol.stuckSince)
+        ))
+
+        if patrol.pursuit then
+            print(("[gs_police:client_telemetry]  pursuit target=%s dist=%s targetSpeed=%s stoppedSince=%s felonyStarted=%s"):format(
+                tostring(patrol.pursuit.targetId),
+                tostring(patrol.pursuit.lastDistance),
+                tostring(patrol.pursuit.speed),
+                tostring(patrol.pursuit.targetStoppedSince),
+                tostring(patrol.pursuit.felonyStopStarted)
+            ))
+        end
+
+        if patrol.suspectInteraction then
+            print(("[gs_police:client_telemetry]  interaction=%s completed=%s suspectVehicle=%s"):format(
+                tostring(patrol.suspectInteraction),
+                tostring(patrol.interactionCompleted),
+                tostring(patrol.suspectVehicle)
+            ))
+        end
+
+        if patrol.compliance then
+            print(("[gs_police:client_telemetry]  compliance=%s completed=%s suspect=%s detainedPed=%s"):format(
+                tostring(patrol.compliance),
+                tostring(patrol.complianceCompleted),
+                tostring(patrol.suspectPed),
+                tostring(patrol.detainedPed)
+            ))
+        end
+    end
+
+    QBCore.Functions.Notify(("Client telemetry printed. Patrols: %s"):format(count), "primary")
+end, false)
+
+RegisterCommand("police_forcecomply", function()
+    ForcedComplianceOutcome =
+        "comply"
+    QBCore.Functions.Notify("Next suspect outcome forced: comply", "success")
+end, false)
+
+RegisterCommand("police_forcerefuse", function()
+    ForcedComplianceOutcome =
+        "refuse"
+    QBCore.Functions.Notify("Next suspect outcome forced: refuse", "success")
+end, false)
+
+RegisterCommand("police_forceflee", function()
+    ForcedComplianceOutcome =
+        "flee"
+    QBCore.Functions.Notify("Next suspect outcome forced: flee", "success")
 end, false)
 
 RegisterCommand("police_clearpatrols_client", function()
