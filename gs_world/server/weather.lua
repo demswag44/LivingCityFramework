@@ -180,6 +180,8 @@ function SendWeatherMessage(source, message)
     print(message)
 end
 
+local getEffectsForType
+
 local function buildWeatherState(weatherType, overrides)
     local weatherConfig = getWeatherConfig()
     local normalizedType = normalizeWeatherType(weatherType) or weatherConfig.DefaultWeather or 'CLEAR'
@@ -278,6 +280,24 @@ local function BuildWindStatusMessage()
         tostring(CurrentWeather.windSpeed or 0.0),
         tostring(CurrentWeather.windDirection or 0.0),
         tostring(CurrentWeather.windGusts or 0.0),
+        tostring(CurrentWeather.windRisk or 1.0)
+    )
+end
+
+local function BuildWeatherEffectsMessage()
+    local effects = getEffectsForType(CurrentWeather.type)
+
+    return ('[gs_world] Effects profile=%s baseWeather=%s visibility=%s witness=%s policeResponse=%s traffic=%s pedestrian=%s roadRisk=%s crime=%s oceanRisk=%s windRisk=%s'):format(
+        tostring(CurrentWeather.profile or LastDynamicProfile or 'manual'),
+        tostring(CurrentWeather.baseWeather or CurrentWeather.type),
+        tostring(effects.visibility or 1.0),
+        tostring(effects.witnessChance or 1.0),
+        tostring(effects.policeResponse or 1.0),
+        tostring(effects.traffic or 1.0),
+        tostring(effects.pedestrianDensity or 1.0),
+        tostring(effects.roadRisk or 1.0),
+        tostring(effects.crimeChance or 1.0),
+        tostring(effects.oceanRisk or 1.0),
         tostring(CurrentWeather.windRisk or 1.0)
     )
 end
@@ -490,7 +510,7 @@ local function applyWeatherProfile(profileName, source, reason)
     return true, result
 end
 
-local function getEffectsForType(weatherType)
+function getEffectsForType(weatherType)
     local weatherConfig = getWeatherConfig()
     local normalizedType = normalizeWeatherType(weatherType or CurrentWeather.type)
     local effects = weatherConfig.Effects and weatherConfig.Effects[normalizedType]
@@ -681,6 +701,11 @@ RegisterCommand('gsweather', function(source, args, rawCommand)
         return
     end
 
+    if action == 'effects' then
+        SendWeatherMessage(source, BuildWeatherEffectsMessage())
+        return
+    end
+
     if action == 'winddir' then
         local direction = tonumber(args[2])
 
@@ -720,7 +745,7 @@ RegisterCommand('gsweather', function(source, args, rawCommand)
         return
     end
 
-    SendWeatherMessage(source, '[gs_world] Usage: /gsweather status|clear|rain|thunder|fog|sync|wind|winddir [0-359]|windspeed [number]|dynamic on|off|cycle on|off|next|profile_name')
+    SendWeatherMessage(source, '[gs_world] Usage: /gsweather status|effects|clear|rain|thunder|fog|sync|wind|winddir [0-359]|windspeed [number]|dynamic on|off|cycle on|off|next|profile_name')
 end, false)
 
 print('[gs_world] Weather command registered: /gsweather')
@@ -841,6 +866,11 @@ RegisterCommand('weather', function(source, args, rawCommand)
         return
     end
 
+    if action == 'effects' then
+        SendWeatherMessage(source, BuildWeatherEffectsMessage())
+        return
+    end
+
     if action == 'winddir' then
         local direction = tonumber(args[2])
 
@@ -880,7 +910,7 @@ RegisterCommand('weather', function(source, args, rawCommand)
         return
     end
 
-    SendWeatherMessage(source, '[gs_world] Usage: /weather status|clear|rain|thunder|fog|sync|wind|winddir [0-359]|windspeed [number]|dynamic on|off|cycle on|off|next|profile_name')
+    SendWeatherMessage(source, '[gs_world] Usage: /weather status|effects|clear|rain|thunder|fog|sync|wind|winddir [0-359]|windspeed [number]|dynamic on|off|cycle on|off|next|profile_name')
 end, false)
 
 AddEventHandler('onResourceStart', function(resourceName)
@@ -898,6 +928,10 @@ end)
 
 exports('GetCurrentWeather', function()
     return copyTable(CurrentWeather)
+end)
+
+exports('GetCurrentWeatherProfile', function()
+    return CurrentWeather.profile or LastDynamicProfile or 'manual'
 end)
 
 exports('IsRaining', function()

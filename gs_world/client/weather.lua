@@ -27,6 +27,41 @@ local function getRainIntensity(weatherType)
     return 0.0
 end
 
+local function copyTable(value, seen)
+    if type(value) ~= 'table' then
+        return value
+    end
+
+    seen = seen or {}
+
+    if seen[value] then
+        return '[cyclic]'
+    end
+
+    seen[value] = true
+
+    local copy = {}
+
+    for key, childValue in pairs(value) do
+        copy[key] = copyTable(childValue, seen)
+    end
+
+    seen[value] = nil
+    return copy
+end
+
+local function getEffectsForType(weatherType)
+    local normalizedType = type(weatherType) == 'string' and string.upper(weatherType) or CurrentWeather and CurrentWeather.type
+    local effects = getWeatherConfig().Effects and getWeatherConfig().Effects[normalizedType]
+
+    return effects or {}
+end
+
+local function getEffectValue(effectName)
+    local value = tonumber(getEffectsForType()[effectName])
+    return value or 1.0
+end
+
 local function applyWind(speed, direction)
     SetWindSpeed(tonumber(speed) or 0.0)
     SetWindDirection(tonumber(direction) or 0.0)
@@ -142,4 +177,73 @@ AddEventHandler('onClientResourceStart', function(resourceName)
         Wait(1000)
         requestWeatherSync()
     end)
+end)
+
+exports('GetCurrentWeather', function()
+    return copyTable(CurrentWeather or {})
+end)
+
+exports('GetCurrentWeatherProfile', function()
+    return CurrentWeather and CurrentWeather.profile or 'manual'
+end)
+
+exports('GetWeatherEffects', function(weatherType)
+    return copyTable(getEffectsForType(weatherType))
+end)
+
+exports('GetVisibilityModifier', function()
+    return getEffectValue('visibility')
+end)
+
+exports('GetCrimeModifier', function()
+    return getEffectValue('crimeChance')
+end)
+
+exports('GetTrafficModifier', function()
+    return getEffectValue('traffic')
+end)
+
+exports('GetWitnessModifier', function()
+    return getEffectValue('witnessChance')
+end)
+
+exports('GetPoliceResponseModifier', function()
+    return getEffectValue('policeResponse')
+end)
+
+exports('GetPedestrianModifier', function()
+    return getEffectValue('pedestrianDensity')
+end)
+
+exports('GetRoadRiskModifier', function()
+    return getEffectValue('roadRisk')
+end)
+
+exports('GetOceanRiskModifier', function()
+    return getEffectValue('oceanRisk')
+end)
+
+exports('GetWindSpeed', function()
+    return tonumber(CurrentWeather and CurrentWeather.windSpeed) or 0.0
+end)
+
+exports('GetWindDirection', function()
+    return tonumber(CurrentWeather and CurrentWeather.windDirection) or 0.0
+end)
+
+exports('GetWindGusts', function()
+    return tonumber(CurrentWeather and CurrentWeather.windGusts) or 0.0
+end)
+
+exports('GetWindRiskModifier', function()
+    return tonumber(CurrentWeather and CurrentWeather.windRisk) or 1.0
+end)
+
+exports('GetCurrentWind', function()
+    return {
+        speed = tonumber(CurrentWeather and CurrentWeather.windSpeed) or 0.0,
+        direction = tonumber(CurrentWeather and CurrentWeather.windDirection) or 0.0,
+        gusts = tonumber(CurrentWeather and CurrentWeather.windGusts) or 0.0,
+        risk = tonumber(CurrentWeather and CurrentWeather.windRisk) or 1.0
+    }
 end)

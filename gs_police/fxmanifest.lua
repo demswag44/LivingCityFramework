@@ -18,12 +18,16 @@ files {
 }
 
 server_scripts {
+    'server/weather_debug.lua',
+    'server/citybrain_adapter.lua',
     'server/main.lua'
 }
 
 client_scripts {
     'client/main.lua',
     'client/ai_response.lua',
+    'client/citizen_behavior.lua',
+    'client/police_awareness.lua',
     'client/ai_patrol.lua',
     'client/moving_target.lua'
 }

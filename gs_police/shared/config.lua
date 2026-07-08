@@ -1,6 +1,27 @@
 Config = Config or {}
 
 Config.Debug = false
+Config.CityBrainIntegrationEnabled = true
+Config.CityBrainReadRecommendationsEnabled = true
+Config.CityBrainPoliceResponseEnabled = true
+Config.CityBrainPatrolBiasEnabled = true
+Config.CityBrainPatrolPressureTuningEnabled = true
+Config.CityBrainShotsFiredCooldownMs = 10000
+
+Config.WeatherIntegration = Config.WeatherIntegration or {}
+Config.WeatherIntegration.Enabled = true
+Config.WeatherIntegration.Debug = false
+Config.WeatherIntegration.ResourceName = 'gs_world'
+
+Config.WeatherIntegration.VisibilityEnabled = true
+Config.WeatherIntegration.WitnessEnabled = true
+Config.WeatherIntegration.ResponseDelayEnabled = true
+Config.WeatherIntegration.RoadRiskEnabled = true
+Config.WeatherIntegration.TrafficEnabled = true
+
+Config.WeatherIntegration.MinVisibilityModifier = 0.35
+Config.WeatherIntegration.MaxResponseDelayMs = 20000
+Config.WeatherIntegration.MaxRoadRiskModifier = 2.5
 
 Config.IncidentRecords = {
     enabled = true,
@@ -83,6 +104,10 @@ Config.Dispatch = {
         suspect_detained = true,
         suspect_refused = true,
         suspect_fled = true,
+        foot_pursuit = true,
+        searching_last_known = true,
+        contact_suspect = true,
+        suspect_lost = true,
         no_suspect_found = true,
         closed = true,
         cancelled = true
@@ -104,7 +129,7 @@ Config.PatrolDispatch.debug = true
 
 Config.PatrolDispatch.maxDispatchDistance = 450.0
 Config.PatrolDispatch.arrivalDistance = 28.0
-Config.PatrolDispatch.driveSpeed = 24.0
+Config.PatrolDispatch.driveSpeed = 32.0
 Config.PatrolDispatch.drivingStyle = 786603
 
 Config.PatrolDispatch.allowFallbackAiSpawn = false
@@ -125,8 +150,8 @@ Config.PatrolDispatch.emergencyResponse = {
         officer_needs_help = true
     },
 
-    emergencyDriveSpeed = 30.0,
-    normalDriveSpeed = 24.0
+    emergencyDriveSpeed = 44.0,
+    normalDriveSpeed = 32.0
 }
 
 Config.PatrolDispatch.scene = Config.PatrolDispatch.scene or {}
@@ -157,6 +182,10 @@ Config.PatrolDispatch.statuses = {
     suspect_detained = true,
     suspect_refused = true,
     suspect_fled = true,
+    foot_pursuit = true,
+    searching_last_known = true,
+    contact_suspect = true,
+    suspect_lost = true,
     no_suspect_found = true
 }
 
@@ -210,7 +239,7 @@ Config.Pursuit.followDistance = 18.0
 Config.Pursuit.arrivalDistance = 28.0
 Config.Pursuit.updateRouteIntervalMs = 2000
 
-Config.Pursuit.driveSpeed = 32.0
+Config.Pursuit.driveSpeed = 55.0
 Config.Pursuit.drivingStyle = 786603
 
 Config.Pursuit.useSiren = true
@@ -244,7 +273,7 @@ Config.EmergencyDriving = Config.EmergencyDriving or {}
 Config.EmergencyDriving.enabled = true
 Config.EmergencyDriving.debug = true
 
-Config.EmergencyDriving.driveSpeed = 36.0
+Config.EmergencyDriving.driveSpeed = 55.0
 Config.EmergencyDriving.drivingStyle = 1074528293
 
 Config.EmergencyDriving.repathIntervalMs = 2500
@@ -492,6 +521,395 @@ Config.Telemetry.messages = {
     failed = "Telemetry failed."
 }
 
+Config.ResponseCodes = Config.ResponseCodes or {}
+
+Config.ResponseCodes.enabled = true
+Config.ResponseCodes.debug = true
+
+Config.ResponseCodes.codes = {
+    code1 = {
+        label = "Code 1",
+        description = "Routine response. No lights or siren. Obey traffic laws but move with purpose.",
+        lights = false,
+        siren = false,
+        mutedSiren = true,
+        driveSpeed = 22.0,
+        drivingStyle = 786603,
+        obeyTraffic = true,
+        trafficYield = false,
+        trafficYieldRadius = 0.0,
+        urgency = 1
+    },
+
+    code2 = {
+        label = "Code 2",
+        description = "Urgent response. Lights only, due regard.",
+        lights = true,
+        siren = false,
+        mutedSiren = true,
+        driveSpeed = 32.0,
+        drivingStyle = 1074528293,
+        obeyTraffic = false,
+        trafficYield = true,
+        trafficYieldRadius = 35.0,
+        urgency = 2
+    },
+
+    code3 = {
+        label = "Code 3",
+        description = "Emergency response. Lights and siren.",
+        lights = true,
+        siren = true,
+        mutedSiren = false,
+        driveSpeed = 55.0,
+        drivingStyle = 1074528293,
+        obeyTraffic = false,
+        trafficYield = true,
+        trafficYieldRadius = 55.0,
+        urgency = 3
+    }
+}
+
+Config.ResponseCodes.threatDefaults = {
+    low = "code1",
+    medium = "code2",
+    high = "code3",
+    deadly = "code3"
+}
+
+Config.ResponseCodes.incidentOverrides = {
+    blackmarket_activity = "code1",
+    shadowmarket_order = "code1",
+    shadowmarket_pickup = "code2",
+    chopshop_activity = "code2",
+    stolen_vehicle_delivery = "code2",
+    stolen_vehicle_activity = "code2",
+    suspect_vehicle = "code2",
+    fleeing_vehicle = "code3",
+    shots_fired = "code3",
+    officer_needs_help = "code3",
+    armed_suspect = "code3",
+    robbery_in_progress = "code3",
+    citizen_threatened = "code2",
+    vehicle_used_as_weapon = "code3"
+}
+
+Config.CitizenBehavior = Config.CitizenBehavior or {}
+
+Config.CitizenBehavior.enabled = true
+Config.CitizenBehavior.debug = true
+
+Config.CitizenBehavior.scanIntervalMs = 750
+Config.CitizenBehavior.playerThreatRadius = 35.0
+Config.CitizenBehavior.shotsRadius = 75.0
+Config.CitizenBehavior.robberyThreatDistance = 12.0
+
+Config.CitizenBehavior.cooldowns = {
+    weaponThreatSeconds = 10,
+    shotsFiredSeconds = 20,
+    robberySeconds = 20,
+    citizenReportSeconds = 30
+}
+
+Config.CitizenBehavior.reactionChance = {
+    normal = {
+        comply = 45,
+        flee = 35,
+        freeze = 10,
+        fight = 8,
+        armedDefense = 2
+    },
+
+    tough = {
+        comply = 25,
+        flee = 25,
+        freeze = 10,
+        fight = 25,
+        armedDefense = 15
+    },
+
+    fearful = {
+        comply = 35,
+        flee = 50,
+        freeze = 10,
+        fight = 4,
+        armedDefense = 1
+    },
+
+    criminal = {
+        comply = 15,
+        flee = 35,
+        freeze = 5,
+        fight = 25,
+        armedDefense = 20
+    }
+}
+
+Config.CitizenBehavior.defaultProfile = "normal"
+
+Config.CitizenBehavior.armedDefense = {
+    enabled = true,
+    maxChance = 20,
+    weaponModels = {
+        "WEAPON_PISTOL",
+        "WEAPON_SNSPISTOL"
+    }
+}
+
+Config.CitizenBehavior.reporting = {
+    enabled = true,
+    reportChance = 35,
+    reportIncidentType = "citizen_threatened"
+}
+
+Config.CitizenBehavior.messages = {
+    citizenComplied = "Citizen complied.",
+    citizenFled = "Citizen fled.",
+    citizenFought = "Citizen fought back.",
+    citizenArmed = "Citizen defended themselves with a firearm.",
+    citizenReported = "Citizen reported suspicious activity."
+}
+
+Config.PoliceAwareness = Config.PoliceAwareness or {}
+
+Config.PoliceAwareness.enabled = true
+Config.PoliceAwareness.debug = true
+
+Config.PoliceAwareness.scanIntervalMs = 500
+Config.PoliceAwareness.weaponVisibleRadius = 45.0
+Config.PoliceAwareness.weaponAimedRadius = 55.0
+Config.PoliceAwareness.shotsRadius = 90.0
+Config.PoliceAwareness.attackRadius = 65.0
+
+Config.PoliceAwareness.behaviors = {
+    weaponVisible = {
+        incidentType = "armed_suspect",
+        threat = "high",
+        responseCode = "code2",
+        note = "Weapon visible near police."
+    },
+
+    weaponAimed = {
+        incidentType = "armed_suspect",
+        threat = "deadly",
+        responseCode = "code3",
+        note = "Weapon aimed near police."
+    },
+
+    shotsFired = {
+        incidentType = "shots_fired",
+        threat = "deadly",
+        responseCode = "code3",
+        note = "Shots fired near police."
+    },
+
+    officerHit = {
+        incidentType = "officer_needs_help",
+        threat = "deadly",
+        responseCode = "code3",
+        note = "Officer attacked."
+    },
+
+    vehicleRammedPolice = {
+        incidentType = "vehicle_used_as_weapon",
+        threat = "high",
+        responseCode = "code3",
+        note = "Police vehicle rammed."
+    }
+}
+
+Config.OfficerSkill = Config.OfficerSkill or {}
+
+Config.OfficerSkill.enabled = true
+Config.OfficerSkill.debug = true
+
+Config.OfficerSkill.defaultProfile = "patrol_trained"
+
+Config.OfficerSkill.profiles = {
+    rookie = {
+        label = "Rookie Officer",
+
+        drivingSkill = 0.45,
+        pursuitSkill = 0.35,
+        trafficNavigation = 0.40,
+        reactionSpeed = 0.45,
+        scenePositioning = 0.40,
+        commandPresence = 0.45,
+        weaponDiscipline = 0.50,
+        decisionQuality = 0.45,
+
+        driveSpeedMultiplier = 0.90,
+        crashRisk = 0.25,
+        repathDelayMultiplier = 1.35,
+        backupRequestChance = 70
+    },
+
+    patrol_trained = {
+        label = "Trained Patrol Officer",
+
+        drivingSkill = 0.70,
+        pursuitSkill = 0.65,
+        trafficNavigation = 0.70,
+        reactionSpeed = 0.70,
+        scenePositioning = 0.70,
+        commandPresence = 0.70,
+        weaponDiscipline = 0.75,
+        decisionQuality = 0.70,
+
+        driveSpeedMultiplier = 1.00,
+        crashRisk = 0.12,
+        repathDelayMultiplier = 1.00,
+        backupRequestChance = 45
+    },
+
+    field_training = {
+        label = "Field Training Officer",
+
+        drivingSkill = 0.82,
+        pursuitSkill = 0.78,
+        trafficNavigation = 0.82,
+        reactionSpeed = 0.78,
+        scenePositioning = 0.82,
+        commandPresence = 0.82,
+        weaponDiscipline = 0.85,
+        decisionQuality = 0.82,
+
+        driveSpeedMultiplier = 1.05,
+        crashRisk = 0.08,
+        repathDelayMultiplier = 0.85,
+        backupRequestChance = 35
+    },
+
+    supervisor = {
+        label = "Supervisor",
+
+        drivingSkill = 0.78,
+        pursuitSkill = 0.74,
+        trafficNavigation = 0.78,
+        reactionSpeed = 0.75,
+        scenePositioning = 0.88,
+        commandPresence = 0.90,
+        weaponDiscipline = 0.88,
+        decisionQuality = 0.90,
+
+        driveSpeedMultiplier = 1.00,
+        crashRisk = 0.08,
+        repathDelayMultiplier = 0.85,
+        backupRequestChance = 30
+    },
+
+    pursuit_certified = {
+        label = "Pursuit Certified Officer",
+
+        drivingSkill = 0.90,
+        pursuitSkill = 0.90,
+        trafficNavigation = 0.86,
+        reactionSpeed = 0.82,
+        scenePositioning = 0.80,
+        commandPresence = 0.78,
+        weaponDiscipline = 0.82,
+        decisionQuality = 0.82,
+
+        driveSpeedMultiplier = 1.08,
+        crashRisk = 0.05,
+        repathDelayMultiplier = 0.70,
+        backupRequestChance = 40
+    }
+}
+
+Config.PursuitPressure = Config.PursuitPressure or {}
+
+Config.PursuitPressure.enabled = true
+Config.PursuitPressure.debug = true
+
+Config.PursuitPressure.immediateBackupOnPursuit = true
+Config.PursuitPressure.immediateBackupRequiresDistance = false
+
+Config.PursuitPressure.maxUnitsPerPursuit = 4
+Config.PursuitPressure.maxBackupUnitsInitial = 1
+Config.PursuitPressure.maxBackupUnitsEscalated = 3
+
+Config.PursuitPressure.backupDelaySeconds = 2
+Config.PursuitPressure.escalationIntervalSeconds = 45
+Config.PursuitPressure.minTimeBetweenBackupRequests = 20
+
+Config.PursuitPressure.distanceEscalationEnabled = true
+Config.PursuitPressure.tooFarDistance = 180.0
+Config.PursuitPressure.criticalDistance = 300.0
+Config.PursuitPressure.lostDistance = 450.0
+
+Config.PursuitPressure.allowSpawnedBackupFallback = true
+Config.PursuitPressure.spawnedBackupUnitType = "backup"
+
+Config.PursuitPressure.hidePoliceBlipsForNonPolice = true
+Config.PursuitPressure.showDebugBlips = false
+
+Config.PursuitPressure.backupResponseCode = "code3"
+
+Config.PursuitPressure.messages = {
+    backupRequested = "Backup requested for pursuit.",
+    backupAssigned = "Backup assigned to pursuit.",
+    noBackupAvailable = "No backup units available.",
+    pursuitEscalated = "Pursuit pressure escalated.",
+    pursuitContained = "Pursuit containment active."
+}
+
+Config.PursuitBackup = {
+    enabled = true,
+    maxBackupUnits = 3,
+    backupDispatchCooldownSeconds = 20,
+    interceptDistanceAhead = 120.0,
+    interceptSideOffset = 18.0,
+    secondaryFollowDistance = 22.0,
+    switchToChaseDistance = 70.0,
+    containmentDistance = 160.0,
+    updateIntervalMs = 2500,
+    debug = true
+}
+
+Config.LivePursuit = Config.LivePursuit or {}
+
+Config.LivePursuit.enabled = true
+Config.LivePursuit.debug = true
+
+Config.LivePursuit.preferEntityChase = true
+Config.LivePursuit.chaseRefreshMs = 500
+Config.LivePursuit.resumeSpeedThreshold = 1.0
+Config.LivePursuit.disableLastKnownRoutingWhenEntityExists = true
+Config.LivePursuit.useHybridFollow = true
+Config.LivePursuit.followBehindDistance = 14.0
+Config.LivePursuit.followSideOffset = 0.0
+Config.LivePursuit.closeDistance = 18.0
+Config.LivePursuit.tooCloseDistance = 8.0
+Config.LivePursuit.backoffDistance = 12.0
+Config.LivePursuit.entityLostFallbackMs = 1200
+
+Config.ContinuousPursuit = Config.ContinuousPursuit or {}
+
+Config.ContinuousPursuit.enabled = true
+Config.ContinuousPursuit.debug = true
+
+Config.ContinuousPursuit.minTaskRefreshMs = 3500
+Config.ContinuousPursuit.useTaskVehicleChase = true
+Config.ContinuousPursuit.hybridOnlyWhenStuck = true
+Config.ContinuousPursuit.gateEmergencyRepathUntilConfirmedStuck = true
+Config.ContinuousPursuit.removePursuitSpeedCaps = true
+Config.ContinuousPursuit.basePursuitSpeed = 55.0
+Config.ContinuousPursuit.maxConfiguredPursuitSpeed = 75.0
+Config.ContinuousPursuit.requireCloseForStop = true
+Config.ContinuousPursuit.felonyStopTriggerDistance = 30.0
+Config.ContinuousPursuit.felonyStopSpeedThreshold = 0.6
+Config.ContinuousPursuit.felonyStopHoldSeconds = 5
+Config.ContinuousPursuit.resumeSpeedThreshold = 1.0
+Config.ContinuousPursuit.neverStopIfDistanceGreaterThan = 35.0
+Config.ContinuousPursuit.targetLostGraceMs = 2500
+Config.ContinuousPursuit.stuckSpeedThreshold = 0.75
+Config.ContinuousPursuit.stuckConfirmMs = 6500
+Config.ContinuousPursuit.minDistanceProgress = 8.0
+Config.ContinuousPursuit.minPositionProgress = 3.0
+Config.ContinuousPursuit.ignoreStuckIfDistanceImproving = true
+Config.ContinuousPursuit.disableHybridWhenCloseDistance = 30.0
+
 Config.DispatchEscalation = {
     enabled = true,
     debug = true,
@@ -566,8 +984,14 @@ Config.DispatchEscalation = {
 Config.AIResponse = {
     enabled = true,
     debug = true,
+    requirePlayerPoliceJob = false,
 
     spawnDistance = 120.0,
+    minSpawnDistance = 95.0,
+    maxSpawnDistance = 145.0,
+    spawnAttempts = 12,
+    spawnSideOffsetMin = 25.0,
+    spawnSideOffsetMax = 70.0,
     arrivalDistance = 25.0,
     despawnDistance = 250.0,
     maxActiveUnits = 5,
@@ -584,13 +1008,30 @@ Config.AIResponse = {
         "s_f_y_cop_01"
     },
 
-    drivingSpeed = 22.0,
+    drivingSpeed = 30.0,
     drivingStyle = 786603,
+    emergencyDrivingStyle = 1074528293,
+    responseRefreshMs = 4000,
+    defaultDriverAbility = 1.0,
+    defaultDriverAggressiveness = 0.55,
+    highThreatDriverAggressiveness = 0.85,
+    officerAccuracyBase = 35,
+    officerAccuracyPerThreat = 8,
+    officerAccuracyMax = 70,
+    engageDistance = 45.0,
+    forceDismountAfterMs = 25000,
+
+    speedByThreat = {
+        low = 30.0,
+        medium = 34.0,
+        high = 42.0,
+        deadly = 48.0
+    },
 
     behavior = {
         low = "investigate",
         medium = "stage",
-        high = "stage",
+        high = "contain",
         deadly = "contain"
     },
 
@@ -641,7 +1082,7 @@ Config.AIScene = {
     threatBehavior = {
         low = "investigate",
         medium = "stage",
-        high = "stage",
+        high = "contain",
         deadly = "contain"
     },
 
@@ -675,6 +1116,7 @@ Config.AIPatrol = {
             label = "Mission Row Patrol",
             enabled = true,
             maxUnits = 1,
+            skillProfile = "patrol_trained",
             vehicle = "police",
             pedModel = "s_m_y_cop_01",
             spawn = vector4(448.3168, -1024.1874, 28.5991, 95.3422),
@@ -692,6 +1134,7 @@ Config.AIPatrol = {
             label = "Davis Patrol",
             enabled = true,
             maxUnits = 1,
+            skillProfile = "patrol_trained",
             vehicle = "police2",
             pedModel = "s_m_y_cop_01",
             spawn = vector4(379.35, -1608.25, 29.29, 230.0),
@@ -709,6 +1152,7 @@ Config.AIPatrol = {
             label = "Vinewood Patrol",
             enabled = true,
             maxUnits = 1,
+            skillProfile = "field_training",
             vehicle = "police3",
             pedModel = "s_m_y_cop_01",
             spawn = vector4(638.65, 1.42, 82.78, 250.0),
@@ -927,6 +1371,46 @@ Config.IncidentTypes = {
     }
 }
 
+Config.IncidentTypes.citizen_threatened = Config.IncidentTypes.citizen_threatened or {
+    baseThreat = "medium",
+    response = "investigate_with_caution",
+    forcePolicy = "less_lethal_preferred",
+    unitsRecommended = 2,
+    description = "Citizen threatened or robbed at gunpoint."
+}
+
+Config.IncidentTypes.robbery_in_progress = Config.IncidentTypes.robbery_in_progress or {
+    baseThreat = "high",
+    response = "contain_and_backup",
+    forcePolicy = "less_lethal_if_safe",
+    unitsRecommended = 3,
+    description = "Robbery in progress."
+}
+
+Config.IncidentTypes.armed_suspect = Config.IncidentTypes.armed_suspect or {
+    baseThreat = "high",
+    response = "contain_and_challenge",
+    forcePolicy = "less_lethal_if_safe",
+    unitsRecommended = 3,
+    description = "Armed suspect observed."
+}
+
+Config.IncidentTypes.officer_needs_help = Config.IncidentTypes.officer_needs_help or {
+    baseThreat = "deadly",
+    response = "active_threat_response",
+    forcePolicy = "deadly_force_authorized_if_necessary",
+    unitsRecommended = 4,
+    description = "Officer needs help."
+}
+
+Config.IncidentTypes.vehicle_used_as_weapon = Config.IncidentTypes.vehicle_used_as_weapon or {
+    baseThreat = "high",
+    response = "contain_and_backup",
+    forcePolicy = "less_lethal_if_safe",
+    unitsRecommended = 3,
+    description = "Vehicle used as a weapon."
+}
+
 Config.EscalationRules = {
     suspectFleeing = {
         threatModifier = 1,
@@ -980,4 +1464,99 @@ Config.OrganizationContext = {
     messages = {
         missing = "Organization context unavailable.",
     }
+}
+
+Config.Awareness = Config.Awareness or {}
+
+Config.Awareness.enabled = true
+Config.Awareness.requirePoliceJob = false
+Config.Awareness.allowAIOnlyResponse = true
+Config.Awareness.witnessReportEnabled = true
+Config.Awareness.witnessRange = 80.0
+Config.Awareness.officerAwarenessRange = 120.0
+Config.Awareness.gunshotRange = 180.0
+Config.Awareness.vehicleCrimeRange = 100.0
+Config.Awareness.scanIntervalMs = 500
+Config.Awareness.updateIntervalMs = 2500
+Config.Awareness.reportCooldownSeconds = 8
+Config.Awareness.activeIncidentTimeoutSeconds = 180
+Config.Awareness.duplicateDispatchCooldownSeconds = 20
+Config.Awareness.reportLogCooldownMs = 5000
+Config.Awareness.reportEventCooldownMs = 3500
+Config.Awareness.sameIncidentUpdateCooldownMs = 3000
+Config.Awareness.reportPrintCooldownMs = 10000
+Config.Awareness.reportHardPrintCooldownMs = 15000
+Config.Awareness.reportSendCooldownMs = 5000
+Config.Awareness.lastKnownUpdateCooldownMs = 3000
+Config.Awareness.recklessSpeedMph = 75.0
+Config.Awareness.reportDelayMs = {
+    min = 1500,
+    max = 6000
+}
+Config.Awareness.debug = true
+Config.Awareness.highPriorityThreshold = 65
+
+Config.Awareness.behaviors = {
+    shotsFired = {
+        incidentType = "shots_fired",
+        threat = "deadly",
+        responseCode = "code3",
+        priority = 100,
+        note = "Shots fired observed by police network."
+    },
+    weaponAimed = {
+        incidentType = "armed_suspect",
+        threat = "deadly",
+        responseCode = "code3",
+        priority = 90,
+        note = "Suspect aimed a weapon in public view."
+    },
+    assault = {
+        incidentType = "robbery_in_progress",
+        threat = "high",
+        responseCode = "code3",
+        priority = 70,
+        note = "Assault observed by witness or officer."
+    },
+    stolenVehicle = {
+        incidentType = "stolen_vehicle_activity",
+        threat = "medium",
+        responseCode = "code2",
+        priority = 60,
+        note = "Vehicle theft observed."
+    },
+    fleeingVehicle = {
+        incidentType = "fleeing_vehicle",
+        threat = "high",
+        responseCode = "code3",
+        priority = 65,
+        note = "Suspect fled in a vehicle after a crime."
+    },
+    recklessDriving = {
+        incidentType = "fleeing_vehicle",
+        threat = "medium",
+        responseCode = "code2",
+        priority = 40,
+        note = "Reckless driving observed near police."
+    },
+    suspiciousBehavior = {
+        incidentType = "armed_suspect",
+        threat = "low",
+        responseCode = "code1",
+        priority = 20,
+        note = "Suspicious masked or armed behavior observed."
+    },
+    runningFromScene = {
+        incidentType = "robbery_in_progress",
+        threat = "medium",
+        responseCode = "code2",
+        priority = 25,
+        note = "Suspect ran from a reported crime scene."
+    }
+}
+
+Config.Awareness.messages = {
+    reportSent = "Crime report sent to police radio.",
+    debugPrinted = "AI police awareness debug printed.",
+    radioDebugPrinted = "Police radio debug printed."
 }

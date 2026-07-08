@@ -19,6 +19,7 @@ Console is always allowed. Player ACE checks are controlled by `Config.Weather.R
 
 ```text
 /gsweather status
+/gsweather effects
 /gsweather clear
 /gsweather rain
 /gsweather thunder
@@ -111,6 +112,8 @@ Wind commands:
 /gsweather windspeed [number]
 ```
 
+`/gsweather effects` prints gameplay modifiers for integrated systems, including visibility, witness chance, police response, traffic, pedestrian density, road risk, crime chance, ocean risk, and wind risk.
+
 `/gsweather wind` prints only wind state: profile, base weather, speed, direction, gusts, and risk. `winddir` and `windspeed` are admin/dev controls that update the current weather state and resync clients.
 
 Client gust simulation is controlled by:
@@ -150,6 +153,7 @@ TriggerClientEvent('gs_world:client:weather:sync', target, weatherState)
 
 ```lua
 exports.gs_world:GetCurrentWeather()
+exports.gs_world:GetCurrentWeatherProfile()
 exports.gs_world:IsRaining()
 exports.gs_world:IsStorming()
 exports.gs_world:IsFoggy()
@@ -170,6 +174,18 @@ exports.gs_world:GetCurrentWind()
 ```
 
 Other GS resources should treat these as read-only modifiers. For example, police can reduce visibility during `FOGGY`, traffic can increase road risk during `RAIN`, and civilian systems can lower pedestrian density during storms.
+
+## Consumers / Integrated Systems
+
+`gs_police` consumes Living City weather as a guarded, read-only integration. Weather affects police visibility, witness reliability, bounded non-pursuit response delay, road risk debug output, and wind risk debug output. Police pursuit behavior remains active and is not hard speed-capped by weather.
+
+Future consumers may include:
+
+- `gs_dispatch`
+- `gs_ai`
+- `gs_blackmarket`
+- `gs_organizations`
+- Ocean and coastal systems
 
 ## Weather Effects
 
