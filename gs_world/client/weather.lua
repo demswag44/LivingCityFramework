@@ -1,4 +1,5 @@
 local CurrentWeather = nil
+local WindGustToken = 0
 
 local function getWeatherConfig()
     return Config.Weather or {}
@@ -26,6 +27,53 @@ local function getRainIntensity(weatherType)
     return 0.0
 end
 
+local function applyWind(speed, direction)
+    SetWindSpeed(tonumber(speed) or 0.0)
+    SetWindDirection(tonumber(direction) or 0.0)
+end
+
+local function startWindGusts(state)
+    WindGustToken = WindGustToken + 1
+    local gustToken = WindGustToken
+    local weatherConfig = getWeatherConfig()
+
+    if weatherConfig.EnableWindGusts ~= true then
+        return
+    end
+
+    local windSpeed = tonumber(state.windSpeed) or 0.0
+    local windDirection = tonumber(state.windDirection) or 0.0
+    local windGusts = tonumber(state.windGusts) or 0.0
+    local windRisk = tonumber(state.windRisk) or 1.0
+
+    if windGusts <= windSpeed or windRisk <= 1.05 then
+        return
+    end
+
+    local profile = state.profile or state.type or 'manual'
+    local intervalMs = math.max(5, tonumber(weatherConfig.WindGustIntervalSeconds) or 45) * 1000
+    local durationMs = math.max(1, tonumber(weatherConfig.WindGustDurationSeconds) or 8) * 1000
+
+    CreateThread(function()
+        while gustToken == WindGustToken and CurrentWeather and (CurrentWeather.profile or CurrentWeather.type) == profile do
+            Wait(intervalMs)
+
+            if gustToken ~= WindGustToken or not CurrentWeather or (CurrentWeather.profile or CurrentWeather.type) ~= profile then
+                break
+            end
+
+            applyWind(windGusts, windDirection)
+            Wait(durationMs)
+
+            if gustToken ~= WindGustToken or not CurrentWeather or (CurrentWeather.profile or CurrentWeather.type) ~= profile then
+                break
+            end
+
+            applyWind(windSpeed, windDirection)
+        end
+    end)
+end
+
 local function applyWeather(state)
     if type(state) ~= 'table' or type(state.type) ~= 'string' then
         return
@@ -36,13 +84,15 @@ local function applyWeather(state)
     local weatherType = string.upper(state.type)
     local transitionMs = tonumber(state.transitionMs) or tonumber(getWeatherConfig().TransitionMs) or 0
     local transitionSeconds = math.max(0.0, transitionMs / 1000.0)
-    local rainIntensity = getRainIntensity(weatherType)
+    local rainIntensity = tonumber(state.rainIntensity) or getRainIntensity(weatherType)
     local windSpeed = tonumber(state.windSpeed) or 0.0
+    local windDirection = tonumber(state.windDirection) or 0.0
 
-    debugPrint(('sync type=%s transition=%s wind=%s rain=%s'):format(
+    debugPrint(('sync type=%s transition=%s wind=%s direction=%s rain=%s'):format(
         tostring(weatherType),
         tostring(transitionSeconds),
         tostring(windSpeed),
+        tostring(windDirection),
         tostring(rainIntensity)
     ))
 
@@ -56,7 +106,8 @@ local function applyWeather(state)
     end
 
     SetRainFxIntensity(rainIntensity)
-    SetWindSpeed(windSpeed)
+    applyWind(windSpeed, windDirection)
+    startWindGusts(state)
 
     CreateThread(function()
         if transitionSeconds > 0.0 then
@@ -66,7 +117,7 @@ local function applyWeather(state)
         SetWeatherTypePersist(weatherType)
         SetWeatherTypeNowPersist(weatherType)
         SetRainFxIntensity(rainIntensity)
-        SetWindSpeed(windSpeed)
+        applyWind(windSpeed, windDirection)
     end)
 end
 
